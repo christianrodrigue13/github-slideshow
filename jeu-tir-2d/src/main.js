@@ -272,7 +272,7 @@ function handleMenuTaps() {
   while ((tap = input.takeTap())) {
     const id = hitMenu(menuButtons(state, view, game), tap);
     if (id === 'play') {
-      goFullscreen();
+      wantFullscreen = true;       // fait au moment où le doigt se lève (voir plus bas)
       startMatch();
     } else if (id === 'replay' || id === 'restart') {
       startMatch();
@@ -285,6 +285,7 @@ function handleMenuTaps() {
 }
 
 // Plein écran + verrouillage paysage (Android ; ignoré ailleurs)
+let wantFullscreen = false;
 function goFullscreen() {
   if (!input.touchMode) return;
   const el = document.documentElement;
@@ -321,7 +322,7 @@ function render() {
     for (const pa of game.particles) pa.draw(ctx);
     ctx.restore();
 
-    drawHUD(ctx, game, view);
+    if (state !== 'over') drawHUD(ctx, game, view);
   } else {
     // Écran d'accueil : la carte en fond
     ctx.save();
@@ -365,8 +366,18 @@ function frame(now) {
 
 // Le son ne peut démarrer qu'après un premier geste (règle des navigateurs)
 input.onFirstGesture = () => sound.unlock();
-// Sur iPhone, le son peut se "rendormir" : on le relance à chaque toucher
-window.addEventListener('pointerdown', () => sound.unlock());
+// Sur mobile, le navigateur n'autorise le son et le plein écran qu'au moment
+// où le doigt SE LÈVE : on (re)tente donc à ce moment-là.
+function onGestureEnd() {
+  sound.unlock();
+  if (wantFullscreen) {
+    wantFullscreen = false;
+    goFullscreen();
+  }
+}
+window.addEventListener('pointerup', onGestureEnd);
+window.addEventListener('touchend', onGestureEnd);
+window.addEventListener('click', onGestureEnd);
 
 // Si on quitte l'application pendant la partie → pause
 document.addEventListener('visibilitychange', () => {
@@ -377,6 +388,7 @@ document.addEventListener('visibilitychange', () => {
 window.__debug = () => ({
   state,
   feed: game.feed.map((f) => f.text),
+  audio: sound.ctx ? sound.ctx.state : 'aucun',
   timeLeft: game.timeLeft,
   fighters: game.fighters.map((f) => ({ name: f.name, alive: f.alive, hp: Math.round(f.health),
     kills: f.kills, deaths: f.deaths, x: Math.round(f.x), y: Math.round(f.y) })),

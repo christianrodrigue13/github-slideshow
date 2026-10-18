@@ -266,8 +266,12 @@ export function drawMenu(ctx, state, view, game) {
   if (state === 'over') {
     ctx.fillStyle = '#ffb347';
     ctx.font = font(28 * u);
-    const winner = ranking(game.fighters)[0];
-    ctx.fillText(winner === game.player ? 'Victoire !' : 'Fin de la partie', cx, 26 * u);
+    const [first, second] = ranking(game.fighters);
+    let title = 'Fin de la partie';
+    if (first === game.player) {
+      title = second && second.kills === first.kills ? 'Égalité en tête !' : 'Victoire !';
+    }
+    ctx.fillText(title, cx, 26 * u);
 
     // Tableau du classement
     const rows = ranking(game.fighters);

@@ -1,0 +1,16 @@
+{
+  "name": "Jet Arena (prototype)",
+  "short_name": "Jet Arena",
+  "description": "Prototype de jeu de tir 2D avec jetpack, solo contre des bots.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#151b2e",
+  "theme_color": "#151b2e",
+  "lang": "fr",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
