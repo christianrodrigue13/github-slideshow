@@ -103,6 +103,16 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Sky.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/objects/Water.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/VignetteShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/GammaCorrectionShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script>
 (() => {
   "use strict";
@@ -130,50 +140,193 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
     } catch (e) {}
   }
 
-  // ---------- Scène 3D ----------
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // ---------- Scène 3D : rendu « cinéma » (PBR, ciel physique, océan, bloom) ----------
+  const lin = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.56;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   $("stage").appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#7fd3ff");
-  scene.fog = new THREE.Fog("#7fd3ff", 70, 160);
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 300);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1200);
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a6ea5, 0.55));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.7);
-  sun.position.set(6, 18, 8); sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 50 });
-  scene.add(sun);
-
-  // Mer
-  const sea = new THREE.Mesh(new THREE.CircleGeometry(80, 48), new THREE.MeshLambertMaterial({ color: 0x1f8fd6 }));
-  sea.rotation.x = -Math.PI / 2; sea.position.y = -3; scene.add(sea);
-  // Île : plateau + bord + socle
-  const island = new THREE.Group(); scene.add(island);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(R0, R0, 0.6, 64), new THREE.MeshLambertMaterial({ color: 0xffe9b8 }));
-  top.position.y = -0.3; top.receiveShadow = true; island.add(top);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(R0, 0.14, 8, 64), new THREE.MeshLambertMaterial({ color: 0xff8a3d }));
-  rim.rotation.x = Math.PI / 2; rim.position.y = 0.02; island.add(rim);
-  const rings = [];
-  for (let k = 1; k <= 3; k++) {
-    const r = new THREE.Mesh(new THREE.RingGeometry(R0 * k / 4 - 0.08, R0 * k / 4 + 0.08, 64), new THREE.MeshBasicMaterial({ color: 0xf2cf86 }));
-    r.rotation.x = -Math.PI / 2; r.position.y = 0.01; island.add(r); rings.push(r);
+  // Ciel physique : soleil bas derrière l'arène (coucher de soleil)
+  const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(86.5), THREE.MathUtils.degToRad(195));
+  const sky = new THREE.Sky(); sky.scale.setScalar(1000);
+  Object.entries({ turbidity: 11, rayleigh: 3.2, mieCoefficient: 0.008, mieDirectionalG: 0.9 }).forEach(([k, v]) => (sky.material.uniforms[k].value = v));
+  sky.material.uniforms.sunPosition.value.copy(sunDir);
+  // Reflets d'environnement (IBL) calculés depuis le ciel
+  {
+    const pmrem = new THREE.PMREMGenerator(renderer), envScene = new THREE.Scene();
+    envScene.add(sky);
+    scene.environment = pmrem.fromScene(envScene).texture;
+    scene.add(sky);
   }
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(R0 * 0.98, R0 * 0.55, 3.2, 32), new THREE.MeshLambertMaterial({ color: 0x8a5a3c }));
-  base.position.y = -2.2; island.add(base);
-  // Petits nuages
-  for (let k = 0; k < 6; k++) {
-    const c = new THREE.Group();
-    for (let j = 0; j < 3; j++) {
-      const s = new THREE.Mesh(new THREE.SphereGeometry(1 + Math.random() * 0.6, 12, 10), new THREE.MeshLambertMaterial({ color: 0xffffff }));
-      s.position.set(j * 1.3, Math.random() * 0.4, 0); c.add(s);
+  scene.fog = new THREE.FogExp2(lin("#d9946a"), 0.0045);
+
+  // Lumières : clé chaude, contre-jour du soleil, ciel
+  scene.add(new THREE.HemisphereLight(lin("#9fc3ff"), lin("#4a2f22"), 0.55));
+  const key = new THREE.DirectionalLight(lin("#ffe1bd"), 2.4);
+  key.position.set(-9, 16, 11); key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+  Object.assign(key.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 50 });
+  scene.add(key);
+  const rimLight = new THREE.DirectionalLight(lin("#ff9a52"), 1.6);
+  rimLight.position.copy(sunDir).multiplyScalar(40); scene.add(rimLight);
+
+  // Océan réfléchissant
+  const waterNormals = new THREE.TextureLoader().load(window.WATER_NORMALS || "waternormals.jpg", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; });
+  const water = new THREE.Water(new THREE.PlaneGeometry(1200, 1200), {
+    textureWidth: 512, textureHeight: 512, waterNormals, sunDirection: sunDir.clone(),
+    sunColor: 0xffd7a8, waterColor: 0x062a3d, distortionScale: 2.2, fog: true,
+  });
+  water.rotation.x = -Math.PI / 2; water.position.y = -9; scene.add(water);
+
+  // Texture de dalles en pierre, dessinée en cercles concentriques
+  function stoneTexture() {
+    const S = 1024, c = document.createElement("canvas"); c.width = c.height = S;
+    const g = c.getContext("2d");
+    g.fillStyle = "#3b322b"; g.fillRect(0, 0, S, S);
+    const rings = 7, step = (S / 2) / rings;
+    for (let r = 0; r < rings; r++) {
+      const n = r === 0 ? 1 : 6 + r * 5, r0 = r * step, r1 = (r + 1) * step;
+      for (let k = 0; k < n; k++) {
+        const a0 = (k / n) * Math.PI * 2 + r * 0.37, a1 = ((k + 1) / n) * Math.PI * 2 + r * 0.37;
+        const l = 58 + Math.random() * 14, h = 30 + Math.random() * 10, sat = 18 + Math.random() * 10;
+        g.fillStyle = `hsl(${h},${sat}%,${l}%)`;
+        g.beginPath();
+        g.arc(S / 2, S / 2, r1 - 3, a0 + 0.006, a1 - 0.006);
+        if (r0 > 0) g.arc(S / 2, S / 2, r0 + 3, a1 - 0.006, a0 + 0.006, true); else g.lineTo(S / 2, S / 2);
+        g.closePath(); g.fill();
+      }
     }
-    const a = (k / 6) * Math.PI * 2;
-    c.position.set(Math.cos(a) * 22, 2 + Math.random() * 3, Math.sin(a) * 22 - 6);
-    scene.add(c);
+    // Usure : taches et grain
+    for (let i = 0; i < 9000; i++) {
+      g.fillStyle = `rgba(${Math.random() < 0.5 ? "0,0,0" : "255,240,220"},${Math.random() * 0.07})`;
+      const s = Math.random() * 6 + 1; g.fillRect(Math.random() * S, Math.random() * S, s, s);
+    }
+    for (let i = 0; i < 40; i++) {
+      const x = Math.random() * S, y = Math.random() * S, rr = 20 + Math.random() * 70;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rr);
+      gr.addColorStop(0, "rgba(40,30,20,.18)"); gr.addColorStop(1, "rgba(40,30,20,0)");
+      g.fillStyle = gr; g.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+    }
+    // Rosace dorée au centre
+    g.strokeStyle = "rgba(214,170,90,.9)"; g.lineWidth = 6;
+    g.beginPath(); g.arc(S / 2, S / 2, step * 1.5, 0, Math.PI * 2); g.stroke();
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; g.beginPath(); g.moveTo(S / 2 + Math.cos(a) * step * 0.4, S / 2 + Math.sin(a) * step * 0.4); g.lineTo(S / 2 + Math.cos(a) * step * 1.5, S / 2 + Math.sin(a) * step * 1.5); g.stroke(); }
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = maxAniso;
+    return t;
   }
+  function noiseRock(geo, amt, seed) {
+    const p = geo.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const n = Math.sin(v.x * 1.7 + seed) * Math.cos(v.z * 1.9 - seed) + Math.sin(v.y * 2.3 + seed * 2) * 0.6;
+      v.multiplyScalar(1 + n * amt + (Math.random() - 0.5) * amt * 0.6);
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+  const rockMat = new THREE.MeshStandardMaterial({ color: lin("#6e5a4c"), roughness: 0.95, flatShading: true });
+  const darkRockMat = new THREE.MeshStandardMaterial({ color: lin("#4a3c34"), roughness: 1, flatShading: true });
+
+  // Île flottante : dalle en pierre + socle rocheux
+  const island = new THREE.Group(); scene.add(island);
+  const floorTex = stoneTexture();
+  const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, bumpMap: floorTex, bumpScale: 0.035, roughness: 0.82, metalness: 0.02 });
+  const sideMat = new THREE.MeshStandardMaterial({ color: lin("#8a7462"), roughness: 0.9 });
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(R0, R0 * 0.97, 0.7, 96, 1), [sideMat, floorMat, sideMat]);
+  top.position.y = -0.35; top.receiveShadow = true; top.castShadow = true; island.add(top);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R0 - 0.06, 0.07, 8, 128),
+    new THREE.MeshStandardMaterial({ color: lin("#2a1a0c"), emissive: lin("#ffb347"), emissiveIntensity: 2.2, roughness: 0.4 }));
+  rim.rotation.x = Math.PI / 2; rim.position.y = 0.02; island.add(rim);
+  const RIM_GOLD = lin("#ffb347"), RIM_RED = lin("#ff2a1a");
+  const base = new THREE.Mesh(noiseRock(new THREE.CylinderGeometry(R0 * 0.98, 0.4, 7.5, 28, 6), 0.12, 1.3), rockMat);
+  base.position.y = -4.45; base.castShadow = true; island.add(base);
+  for (let k = 0; k < 7; k++) {
+    const a = (k / 7) * Math.PI * 2, rr = R0 * (0.5 + Math.random() * 0.3);
+    const s = new THREE.Mesh(noiseRock(new THREE.ConeGeometry(0.6 + Math.random() * 0.6, 2.5 + Math.random() * 2, 7, 3), 0.15, k), darkRockMat);
+    s.rotation.x = Math.PI; s.position.set(Math.cos(a) * rr, -6 - Math.random() * 2.5, Math.sin(a) * rr); island.add(s);
+  }
+
+  // Ruines flottantes avec braseros (derrière et sur les côtés, pour ne pas cacher le jeu)
+  const fireTex = (() => {
+    const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,220,1)"); gr.addColorStop(0.25, "rgba(255,190,80,.9)"); gr.addColorStop(0.6, "rgba(255,90,20,.35)"); gr.addColorStop(1, "rgba(255,60,0,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+  })();
+  const pillarMat = new THREE.MeshStandardMaterial({ color: lin("#b9a58c"), roughness: 0.85 });
+  const bronze = new THREE.MeshStandardMaterial({ color: lin("#8c5a2b"), metalness: 0.85, roughness: 0.35 });
+  const torches = [];
+  [200, 340, 245, 295].forEach((deg, k) => {
+    const a = THREE.MathUtils.degToRad(deg), r = R0 + 2.3 + (k > 1 ? 1.2 : 0);
+    const g = new THREE.Group(); g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    const plinth = new THREE.Mesh(noiseRock(new THREE.DodecahedronGeometry(1.1, 1), 0.12, k + 3), rockMat);
+    plinth.scale.set(1, 0.7, 1); plinth.position.y = -1.2; plinth.castShadow = true; g.add(plinth);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.4, 3.2, 14), pillarMat);
+    col.position.y = 0.9; col.castShadow = true; g.add(col);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.22, 0.95), pillarMat); cap.position.y = 2.6; g.add(cap);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.35, 16, 1, true), bronze); bowl.position.y = 2.88; g.add(bowl);
+    const flames = [];
+    for (let j = 0; j < 3; j++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+      sp.position.y = 3.2 + j * 0.25; g.add(sp); flames.push(sp);
+    }
+    const light = new THREE.PointLight(lin("#ff8a3d"), 2.2, 11, 2); light.position.y = 3.4; g.add(light);
+    g.userData = { bob: Math.random() * 6, y0: k > 1 ? 0.6 : 0 };
+    scene.add(g); torches.push({ g, flames, light });
+  });
+  // Rochers flottants au loin
+  const floaters = [];
+  for (let k = 0; k < 10; k++) {
+    const a = Math.PI * (1.1 + Math.random() * 0.8), r = 30 + Math.random() * 35;
+    const m = new THREE.Mesh(noiseRock(new THREE.DodecahedronGeometry(1 + Math.random() * 2.2, 1), 0.18, k * 7), k % 2 ? rockMat : darkRockMat);
+    m.position.set(Math.cos(a) * r, -6 + Math.random() * 14, Math.sin(a) * r); m.scale.setScalar(1.6);
+    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    m.userData = { y0: m.position.y, ph: Math.random() * 6 };
+    scene.add(m); floaters.push(m);
+  }
+  // Braises qui montent
+  const EMB = 160, embGeo = new THREE.BufferGeometry(), embPos = new Float32Array(EMB * 3), embVel = [];
+  for (let i = 0; i < EMB; i++) {
+    embPos.set([(Math.random() - 0.5) * 30, Math.random() * 10 - 4, (Math.random() - 0.5) * 30 - 4], i * 3);
+    embVel.push(0.3 + Math.random() * 0.7);
+  }
+  embGeo.setAttribute("position", new THREE.BufferAttribute(embPos, 3));
+  const embers = new THREE.Points(embGeo, new THREE.PointsMaterial({ map: fireTex, color: lin("#ffb066"), size: 0.22, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(embers);
+
+  function envUpdate(dt, t) {
+    water.material.uniforms.time.value += dt * 0.6;
+    torches.forEach(({ g, flames, light }, k) => {
+      g.position.y = g.userData.y0 + Math.sin(t * 0.7 + g.userData.bob) * 0.25;
+      flames.forEach((f, j) => { const s = 0.9 + Math.sin(t * 13 + j * 2 + k) * 0.18 + Math.random() * 0.12; f.scale.set(s * (1.2 - j * 0.3), s * (1.5 - j * 0.3), 1); });
+      light.intensity = 2 + Math.sin(t * 17 + k) * 0.3 + Math.random() * 0.25;
+    });
+    floaters.forEach((m) => { m.position.y = m.userData.y0 + Math.sin(t * 0.5 + m.userData.ph) * 0.6; m.rotation.y += dt * 0.05; });
+    for (let i = 0; i < EMB; i++) {
+      embPos[i * 3 + 1] += embVel[i] * dt;
+      embPos[i * 3] += Math.sin(t + i) * dt * 0.2;
+      if (embPos[i * 3 + 1] > 9) embPos[i * 3 + 1] = -5;
+    }
+    embGeo.attributes.position.needsUpdate = true;
+  }
+
+  // Post-traitement : bloom, vignette, correction gamma
+  const composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.55, 0.86);
+  composer.addPass(bloom);
+  const vignette = new THREE.ShaderPass(THREE.VignetteShader);
+  vignette.uniforms.offset.value = 0.95; vignette.uniforms.darkness.value = 1.15;
+  composer.addPass(vignette);
+  composer.addPass(new THREE.ShaderPass(THREE.GammaCorrectionShader));
 
   // Personnage 3D animé : RobotExpressive (Tomás Laulhé, CC0), recoloré pour chaque joueur
   let robot = null;
@@ -200,7 +353,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
-      const recolor = (m) => { m = m.clone(); if (m.name === "Main") m.color.set(color); return m; };
+      const recolor = (m) => { m = m.clone(); if (m.name === "Main") m.color.copy(lin(color)); m.envMapIntensity = 1.2; return m; };
       o.material = Array.isArray(o.material) ? o.material.map(recolor) : recolor(o.material);
     });
     g.add(model); scene.add(g);
@@ -231,19 +384,26 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
   }
 
   let shake = 0;
+  // Caméra en plongée : l'arène en bas, l'horizon et le ciel en haut de l'écran
+  const CAM_ELEV = THREE.MathUtils.degToRad(31), CAM_PITCH = THREE.MathUtils.degToRad(21);
+  function placeCamera() {
+    const half = R0 + 0.6, tv = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), th = tv * camera.aspect;
+    let d = half / th;
+    // Recule jusqu'à ce que le bord avant de l'arène tienne dans l'écran
+    for (let k = 0; k < 60; k++) {
+      const cy = d * Math.sin(CAM_ELEV), cz = d * Math.cos(CAM_ELEV);
+      const nearDep = Math.atan2(cy + 0.5, cz - half);
+      if (nearDep <= CAM_PITCH + Math.atan(tv) - 0.04 && half / (cz - half * 0.2) <= th) break;
+      d *= 1.04;
+    }
+    camera.position.set(0, d * Math.sin(CAM_ELEV), d * Math.cos(CAM_ELEV));
+    camera.lookAt(0, camera.position.y - Math.sin(CAM_PITCH) * 10, camera.position.z - Math.cos(CAM_PITCH) * 10);
+  }
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    const half = (R0 + 0.9);
-    const vfov = camera.fov * Math.PI / 180;
-    const fitV = half / Math.tan(vfov / 2);
-    const fitH = half / (Math.tan(vfov / 2) * camera.aspect);
-    const d = Math.max(fitV * 0.9, fitH * 0.92);
-    const dir = new THREE.Vector3(0, 0.66, 0.75).normalize();
-    camera.position.copy(dir.multiplyScalar(d));
-    camera.lookAt(0, 0.4, 0.3);
-    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false); composer.setSize(w, h);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    placeCamera();
   }
   window.addEventListener("resize", resize); resize();
 
@@ -439,7 +599,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
       s.m.scale.setScalar(Math.max(0.01, s.life / 0.6));
       if (s.life <= 0) { scene.remove(s.m); s.m.material.dispose(); sparks.splice(k, 1); }
     }
-    rim.material.color.set(platR < R0 && Math.sin(t * 10) > 0 ? 0xff3d3d : 0xff8a3d);
+    rim.material.emissive.copy(platR < R0 && Math.sin(t * 10) > 0 ? RIM_RED : RIM_GOLD);
+    envUpdate(dt, t);
   }
 
   // ---------- Manches ----------
@@ -522,8 +683,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2.2rem
     if (state === "play" || state === "between") step(dt);
     if (state === "setup") players.forEach((p, k) => { p.face += dt * (k % 2 ? 0.6 : -0.6); });
     animate(dt, t);
-    if (shake > 0.01) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake *= 0.85; if (shake < 0.01) resize(); }
-    renderer.render(scene, camera);
+    if (shake > 0.01) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake *= 0.85; if (shake < 0.01) placeCamera(); }
+    composer.render();
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
