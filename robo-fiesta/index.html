@@ -133,6 +133,12 @@ button.chip { cursor: pointer; }
 .row .earn { font-weight: 700; font-size: .75rem; color: #b07800; white-space: nowrap; }
 .overlay { position: fixed; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(36,27,58,.75); }
 .adbox { width: min(340px, 100%); aspect-ratio: 9 / 12; max-height: 60vh; border: 3px dashed var(--muted); border-radius: 14px; display: grid; place-items: center; text-align: center; color: var(--muted); font-weight: 700; padding: 16px; }
+#gameUI { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+.bigsym { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-family: var(--display); font-size: clamp(5rem, 30vw, 9rem); line-height: 1; -webkit-text-stroke: 4px var(--ink); text-shadow: 0 8px 0 var(--ink); }
+.rhythm { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); width: min(280px, 72%); height: 44%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.lane { position: relative; border-radius: 14px; background: rgba(36,27,58,.4); border: 2px solid rgba(255,255,255,.55); overflow: hidden; }
+.hitbar { position: absolute; left: 6%; right: 6%; bottom: 6px; height: 40px; border-radius: 12px; border: 3px solid; display: grid; place-items: center; font-size: 22px; font-weight: 700; background: rgba(255,255,255,.15); }
+.note { position: absolute; left: 10%; right: 10%; height: 36px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 20px; color: #fff; border: 3px solid var(--ink); }
 .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 50px); transform: translateX(-50%); z-index: 4; pointer-events: none; background: var(--ink); color: var(--cream); font-weight: 700; padding: 6px 14px; border-radius: 999px; white-space: nowrap; }
 </style>
 </head>
@@ -142,6 +148,7 @@ button.chip { cursor: pointer; }
 <div id="pads"></div>
 <div class="banner" id="banner" hidden></div>
 <div class="toast" id="toast" hidden></div>
+<div id="gameUI"></div>
 
 <div class="screen top" id="setup">
   <h1>Robo Fiesta</h1>
@@ -803,7 +810,7 @@ button.chip { cursor: pointer; }
       if (!human && !fillBots) return;
       const ci = picks[k], C = CHARS[ci];
       const p = { ...d, idx: k, ci, name: C.name, tag: human ? `J${k + 1}` : "ORDI", human, total: 0, mesh: makeChar(ci), x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, face: 0,
-        inX: 0, inZ: 0, touchX: 0, touchZ: 0, padX: 0, padZ: 0, acts: new Set(), cds: {}, think: 0, wander: [0, 0], wanderT: 0, size: 1, sq: 0, dustT: 0 };
+        inX: 0, inZ: 0, touchX: 0, touchZ: 0, padX: 0, padZ: 0, acts: new Set(), cds: {}, hold: {}, think: 0, wander: [0, 0], wanderT: 0, size: 1, sq: 0, dustT: 0 };
       p.bubble = new THREE.Mesh(new THREE.SphereGeometry(1.25, 20, 14), new THREE.MeshBasicMaterial({ color: lin(d.color), transparent: true, opacity: 0.28, depthWrite: false }));
       p.bubble.position.y = 1.2; p.bubble.visible = false; p.mesh.g.add(p.bubble);
       p.ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.86, 36), new THREE.MeshBasicMaterial({ color: lin(d.color), transparent: true, opacity: 0.9, depthWrite: false }));
@@ -836,7 +843,7 @@ button.chip { cursor: pointer; }
 
   // ---------- Contrôles : joystick + 4 boutons façon manette PS5 ----------
   const BTN = { t: "△", o: "○", x: "✕", s: "□" };
-  const ACT_NAME = { jump: "Saut", dash: "Fonce", punch: "Poing", guard: "Bouclier", grab: "Attrape", splash: "Peinture", mash: "Tire !" };
+  const ACT_NAME = { jump: "Saut", dash: "Fonce", punch: "Poing", guard: "Bouclier", grab: "Attrape", splash: "Peinture", mash: "Martèle", b_t: "Réponds", b_o: "Réponds", b_x: "Réponds", b_s: "Réponds", press: "Appuie", gas: "Gaz", throw: "Lance", n_t: "Note", n_o: "Note", n_x: "Note", n_s: "Note" };
   function pressButton(p, b) {
     if (!live() || !G) return;
     if (state === "practice" && !p.ready) { p.ready = true; SFX.ui(); renderReady(); }
@@ -855,7 +862,11 @@ button.chip { cursor: pointer; }
       pad.innerHTML = `<div class="joy"><div class="knob"></div></div><div class="face">${["t", "o", "x", "s"].map((b) => `<button class="fb ${b}" data-b="${b}" aria-label="${BTN[b]} (${p.name})"><b>${BTN[b]}</b><small></small></button>`).join("")}</div>`;
       root.appendChild(pad);
       const joy = pad.querySelector(".joy"), knob = pad.querySelector(".knob");
-      p.btnEls = {}; pad.querySelectorAll(".fb").forEach((el) => { p.btnEls[el.dataset.b] = el; el.addEventListener("pointerdown", (e) => { e.preventDefault(); pressButton(p, el.dataset.b); }); });
+      p.btnEls = {}; pad.querySelectorAll(".fb").forEach((el) => {
+        const b = el.dataset.b; p.btnEls[b] = el;
+        el.addEventListener("pointerdown", (e) => { e.preventDefault(); p.hold[b] = true; pressButton(p, b); });
+        ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => el.addEventListener(ev, () => (p.hold[b] = false)));
+      });
       const flipped = pos === "top" || pos[0] === "t";
       let pid = null;
       const upd = (e) => {
@@ -883,6 +894,7 @@ button.chip { cursor: pointer; }
   const keysDown = new Set();
   window.addEventListener("keydown", (e) => {
     keysDown.add(e.code);
+    for (const p of players) if (p.human) for (const b of ["x", "o", "s", "t"]) if (p.keys[b].includes(e.code)) p.hold[b] = true;
     if (!live()) return;
     for (const p of players) if (p.human) for (const b of ["x", "o", "s", "t"]) if (p.keys[b].includes(e.code) && !e.repeat) { pressButton(p, b); e.preventDefault(); }
     if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
@@ -903,12 +915,12 @@ button.chip { cursor: pointer; }
         if (Math.hypot(x, z) < 0.18) { x = 0; z = 0; }
         if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) z = -1; if (btn(13)) z = 1;
         p.padX = x; p.padZ = z;
-        [[0, "x"], [1, "o"], [2, "s"], [3, "t"]].forEach(([k, b]) => { if (btn(k) && !prev[k]) pressButton(p, b); });
+        [[0, "x"], [1, "o"], [2, "s"], [3, "t"]].forEach(([k, b]) => { p.hold[b] = btn(k); if (btn(k) && !prev[k]) pressButton(p, b); });
       }
       for (let k = 0; k < 16; k++) prev[k] = btn(k);
     });
   }
-  window.addEventListener("keyup", (e) => keysDown.delete(e.code));
+  window.addEventListener("keyup", (e) => { keysDown.delete(e.code); for (const p of players) if (p.human) for (const b of ["x", "o", "s", "t"]) if (p.keys[b].includes(e.code)) p.hold[b] = false; });
   const any = (arr) => arr.some((c) => keysDown.has(c));
 
   // ---------- Outils communs aux mini-jeux ----------
@@ -1818,6 +1830,478 @@ button.chip { cursor: pointer; }
     rule: "Course sur la glace : ça glisse ! ✕ Saute par-dessus les barrières de glace, □ Fonce pour accélérer et évite les blocs qui glissent. Le premier arrivé gagne.",
   });
 
+  // ---------- Lot 3 : mécaniques inspirées des grands classiques du party game ----------
+  const SYM = { t: "△", o: "○", x: "✕", s: "□" }, SYMCOL = { t: "#3fd9b0", o: "#ff5a73", x: "#79a6ff", s: "#ff86d1" };
+  const ui = () => $("gameUI");
+  const lives = (n) => "♥".repeat(Math.max(0, n)) || "✕";
+
+  def("rope", Object.assign({}, survival, {
+    name: "Corde infernale", short: "Saute au-dessus de la corde", theme: "plage", layout: "field", layoutOpts: { W: 12, D: 3 }, duration: 45, buttons: { x: "jump", o: "punch" }, botPunch: false,
+    rule: "Deux géants font tourner une corde de plus en plus vite. ✕ Saute à chaque passage ! Si elle te touche les pieds, tu es éliminé. Le dernier debout gagne, ou tous ceux encore là après 45 secondes.",
+    spots() { return players.map((p, i) => [(i - (players.length - 1) / 2) * 2.4, 0]); },
+    start() {
+      this.th = 0; this.w = 2.6;
+      this.rope = mk(new THREE.CylinderGeometry(0.07, 0.07, L.W + 1.6, 8), "#ff5a3c", { ol: 0.02 }); this.rope.rotation.z = Math.PI / 2; gameObjs.add(this.rope);
+      [-1, 1].forEach((s) => { const c = makeChar(Math.floor(Math.random() * CHARS.length), gameObjs); c.g.scale.setScalar(1.7); c.g.position.set(s * (L.W / 2 + 1.6), 0, 0); c.g.rotation.y = -s * Math.PI / 2; anim(c, "Idle"); this["turner" + s] = c; });
+      this.place();
+    },
+    place() { const y = 1.75 + 1.7 * Math.cos(this.th), z = 1.7 * Math.sin(this.th); this.rope.position.set(0, y, z); this.ry = y; this.rz = z; },
+    update(dt) {
+      this.w = Math.min(6.2, 2.6 + gameTime * 0.08); this.th += this.w * dt; this.place();
+      this["turner-1"].mixer.update(dt); this["turner1"].mixer.update(dt);
+      for (const p of standing()) {
+        if (p.heldBy || p.hitT > 0) continue;
+        if (Math.abs(this.rz - p.z) < 0.32 && this.ry > p.y - 0.05 && this.ry < p.y + 2.1) { knockOut(p, p.x, p.z - 0.5 * Math.sign(Math.cos(this.th))); popup("RATÉ !", p.x, 3, p.z, "#ff5a73", 1.3); SFX.punch(); shake = 0.3; }
+      }
+    },
+    done: () => timeLeft <= 0 || alive().length <= 1,
+    botGoal: (p) => [p.x, clamp(p.z, -0.6, 0.6)],
+    botAct(p) {
+      if (p.y > 0.001) return null;
+      const target = Math.PI - Math.asin(clamp(p.z / 1.7, -1, 1));
+      let d = (target - (this.th % (Math.PI * 2))) % (Math.PI * 2); if (d < 0) d += Math.PI * 2;
+      const tt = d / this.w; return tt < 0.2 && tt > 0.04 && Math.random() < 0.9 * Math.min(1, p.skill) ? "jump" : null;
+    },
+  }));
+
+  def("simon", {
+    name: "Le chef a dit", short: "Appuie sur le bon bouton", theme: "espace", layout: "field", lockMove: true,
+    buttons: { t: "b_t", o: "b_o", x: "b_x", s: "b_s" },
+    rule: "Un symbole s'affiche : appuie vite sur le bouton correspondant (△ ○ ✕ □). Si c'est écrit « RIEN », n'appuie sur rien ! Une erreur ou un retard coûte un cœur. Le dernier avec des cœurs gagne.",
+    start() {
+      this.round = 0; this.phase = "wait"; this.t = 1.5; this.cur = null;
+      players.forEach((p) => { p.hp = 3; });
+      const ref = makeChar(Math.floor(Math.random() * CHARS.length), gameObjs); ref.g.scale.setScalar(2.2); ref.g.position.set(0, 0, -L.D / 2 - 1.5); anim(ref, "Wave"); this.ref = ref;
+    },
+    onBegin() { players.forEach((p) => { p.hp = 3; }); },
+    show(sym) { ui().innerHTML = sym ? `<div class="bigsym" style="color:${sym === "none" ? "#ffffff" : SYMCOL[sym]}">${sym === "none" ? "RIEN" : SYM[sym]}</div>` : ""; },
+    answer(p, b) {
+      if (this.phase !== "go" || p.answered || !active(p)) return;
+      p.answered = true;
+      if (this.cur !== "none" && b === this.cur) { popup("✓", p.x, 3, p.z, "#7fffb0", 1.2); SFX.coin(); p.sq = 0.4; }
+      else this.fail(p);
+    },
+    fail(p) { p.hp--; popup(p.hp > 0 ? "−♥" : "PERDU", p.x, 3, p.z, "#ff5a73", 1.3); SFX.fall(); shake = 0.15; if (p.hp <= 0) knockOut(p, p.x, p.z + 0.01); },
+    custom: { b_t(p) { this.answer(p, "t"); }, b_o(p) { this.answer(p, "o"); }, b_x(p) { this.answer(p, "x"); }, b_s(p) { this.answer(p, "s"); } },
+    update(dt) {
+      this.t -= dt; this.ref.mixer.update(dt);
+      if (this.phase === "wait" && this.t <= 0) {
+        this.round++; this.phase = "go"; this.t = Math.max(0.75, 1.7 - this.round * 0.08);
+        this.cur = this.round > 3 && Math.random() < 0.2 ? "none" : pick(["t", "o", "x", "s"]);
+        players.forEach((p) => { p.answered = false; p.botAt = gameTime + rnd(0.3, 0.75) / (p.skill || 1); });
+        this.show(this.cur); tone(this.cur === "none" ? 300 : 700, 0.15, "square", 0.05); anim(this.ref, "Punch");
+      } else if (this.phase === "go" && this.t <= 0) {
+        if (this.cur !== "none") for (const p of alive()) if (!p.answered) this.fail(p);
+        this.phase = "wait"; this.t = 0.9; this.show(null); anim(this.ref, "Idle");
+      }
+    },
+    done() { return alive().length <= 1 || this.round >= 16 && this.phase === "wait"; },
+    score: (p) => (p.out || p.ko ? p.outAt : 1000 + p.hp),
+    value: (p) => (p.out || p.ko ? "Éliminé" : lives(p.hp)),
+    chip: (p) => lives(p.hp),
+    botGoal: (p) => [p.x, p.z],
+    botAct(p) {
+      if (this.phase !== "go" || p.answered || gameTime < p.botAt) return null;
+      if (this.cur === "none") { if (Math.random() < 0.12) return "b_" + pick(["t", "o", "x", "s"]); p.answered = true; return null; }
+      return "b_" + (Math.random() < 0.88 ? this.cur : pick(["t", "o", "x", "s"]));
+    },
+  });
+
+  def("detonator", Object.assign({}, survival, {
+    name: "Détonateur", short: "Un des leviers fait tout sauter", theme: "volcan", buttons: { o: "press" },
+    rule: "Chacun son tour, va sur un détonateur libre et appuie sur ○. L'un d'eux est piégé : celui qui l'enclenche saute ! Les autres attendent sans bouger. Le dernier debout gagne.",
+    start() {
+      this.bomb = mk(new THREE.SphereGeometry(1, 20, 16), "#2b2840"); this.bomb.position.y = 1; gameObjs.add(this.bomb);
+      const fuse = mk(new THREE.CylinderGeometry(0.08, 0.08, 0.6, 6), "#c9a26a", { ol: 0.02 }); fuse.position.y = 1.2; this.bomb.add(fuse);
+      this.plungers = []; this.turn = -1; this.wait = 1; this.newRound();
+    },
+    newRound() {
+      for (const pl of this.plungers) gameObjs.remove(pl.g);
+      const n = alive().length + 1; this.plungers = []; const trap = Math.floor(Math.random() * n);
+      for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2, x = Math.cos(a) * 3.4, z = Math.sin(a) * 3.4, g = new THREE.Group();
+        const box = mk(new THREE.BoxGeometry(0.8, 0.6, 0.8), "#c4561f"); box.position.y = 0.3; g.add(box);
+        const rod = mk(new THREE.CylinderGeometry(0.06, 0.06, 0.8, 6), "#9aa5c0", { ol: 0.02 }); rod.position.y = 0.9; g.add(rod);
+        const handle = mk(new THREE.BoxGeometry(0.7, 0.12, 0.12), "#ffd23f", { ol: 0.02 }); handle.position.y = 1.3; g.add(handle);
+        g.position.set(x, 0, z); gameObjs.add(g);
+        this.plungers.push({ g, x, z, rod, handle, used: false, trap: k === trap });
+      }
+    },
+    nextTurn() {
+      const al = players.filter((p) => !p.out && !p.ko); if (al.length <= 1) return;
+      let i = this.turn; do { i = (i + 1) % players.length; } while (players[i].out || players[i].ko);
+      this.turn = i; this.timer = 6; const p = players[i]; popup("À TOI !", p.x, 3.2, p.z, p.color, 1.3); toast(`Au tour de ${p.name}`); SFX.ui();
+    },
+    custom: { press(p) {
+      if (players[this.turn] !== p || this.wait > 0) return;
+      const pl = this.plungers.filter((q) => !q.used).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      if (pl && Math.hypot(pl.x - p.x, pl.z - p.z) < 1.4) this.trigger(p, pl); else popup("TROP LOIN", p.x, 3, p.z, "#ffffff", 1);
+    } },
+    trigger(p, pl) {
+      pl.used = true; pl.rod.position.y = 0.6; pl.handle.position.y = 1.0; p.punchT = 0.4; SFX.punch();
+      if (pl.trap) { burst(0, 1.5, 0, "#ff8a3d", 26); SFX.boom(); shake = 0.7; hitStop(0.12); popup("BOUM !", p.x, 3, p.z, "#ff8a3d", 1.8); knockOut(p, 0, 0.01); this.wait = 2; this.reset = true; }
+      else { popup("OUF !", p.x, 3, p.z, "#7fffb0", 1.2); this.wait = 0.8; if (this.plungers.filter((q) => !q.used).length <= 1) this.reset = true; }
+    },
+    update(dt, t) {
+      this.bomb.scale.setScalar(1 + Math.sin(t * 6) * 0.03);
+      const cur = players[this.turn];
+      for (const p of players) if (p !== cur && active(p)) { p.stun = 0.15; }
+      if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { if (this.reset) { this.reset = false; if (alive().length > 1) this.newRound(); } this.nextTurn(); } return; }
+      if (!cur) return;
+      this.timer -= dt;
+      if (this.timer <= 0) { const pl = this.plungers.filter((q) => !q.used).sort((a, b) => Math.hypot(a.x - cur.x, a.z - cur.z) - Math.hypot(b.x - cur.x, b.z - cur.z))[0]; if (pl) this.trigger(cur, pl); }
+    },
+    done: () => alive().length <= 1,
+    botGoal(p) {
+      if (players[this.turn] !== p) return [p.x, p.z];
+      if (!p.choice || p.choice.used) p.choice = pick(this.plungers.filter((q) => !q.used));
+      return p.choice ? [p.choice.x * 0.75, p.choice.z * 0.75] : [p.x, p.z];
+    },
+    botAct(p) { return players[this.turn] === p && p.choice && Math.hypot(p.choice.x - p.x, p.choice.z - p.z) < 1.4 && this.timer < 5 ? "press" : null; },
+  }));
+
+  def("launch", {
+    name: "Robo-envol", short: "Martèle pour voler le plus loin", theme: "prairie", layout: "track", lockMove: true,
+    buttons: { x: "mash", o: "mash", s: "mash", t: "mash" },
+    rule: "Martèle n'importe quel bouton pendant 5 secondes pour charger ton réacteur. Ensuite, ton robot s'envole : celui qui atterrit le plus loin gagne !",
+    spots() { return players.map((p, i) => [(i - (players.length - 1) / 2) * 1.7, 1.5]); },
+    start() { this.phase = "charge"; this.t = 5; this.landed = 0; players.forEach((p) => { p.dist = 0; }); setCameraFrame(0, L.W / 2 + 0.8, 7, true); },
+    onBegin() { players.forEach((p) => { p.dist = 0; p.gs = 0; }); },
+    custom: { mash(p) { if (this.phase !== "charge" || state !== "play") return; p.gs = Math.min(70, p.gs + 1); p.sq = 0.25; if (p.gs % 5 === 0) dust(p.x, p.z, "#ffd23f", 2, 1); if (Math.random() < 0.3) tone(200 + p.gs * 10, 0.05, "square", 0.02); } },
+    update(dt, t) {
+      this.t -= dt;
+      if (this.phase === "charge") {
+        players.forEach((p) => { p.celebrate = false; if (p.gs > 0 && Math.random() < dt * p.gs * 0.2) dust(p.x, p.z, "#ff8a3d", 1, 0.6); });
+        if (this.t <= 0) { this.phase = "fly"; this.t = 0; SFX.toss(); players.forEach((p) => { p.target = 6 + p.gs * 0.85; p.flyT = 0; p.z0 = p.z; }); }
+        return;
+      }
+      let maxZ = 0, done = 0;
+      players.forEach((p) => {
+        p.flyT += dt; const k = Math.min(1, p.flyT / 2.6);
+        p.z = p.z0 - p.target * (1 - Math.pow(1 - k, 2)); p.y = Math.sin(k * Math.PI) * Math.min(9, p.target * 0.2); p.vx = 0; p.vz = -1; p.dist = p.target * k;
+        if (k >= 1) { done++; if (!p.landedFx) { p.landedFx = true; dust(p.x, p.z, "#ffffff", 8, 2.5); SFX.land(); popup(`${p.dist.toFixed(1)} m`, p.x, 3, p.z, "#ffd23f", 1.2); } }
+        if (Math.random() < dt * 20 && k < 1) dust(p.x, p.z + 0.5, "#ff8a3d", 1, 0.2);
+        maxZ = Math.min(maxZ, p.z);
+      });
+      setCameraFrame(maxZ + 3, L.W / 2 + 0.8, 9);
+      if (done === players.length) this.finished = true;
+    },
+    done() { return !!this.finished; },
+    score: (p) => Math.round(p.dist * 10), value: (p) => `${p.dist.toFixed(1)} m`, chip(p) { return this.phase === "charge" ? p.gs : `${p.dist.toFixed(0)} m`; },
+    botGoal: (p) => [p.x, p.z],
+    botAct(p) { return Math.random() < 0.8 * p.skill ? "mash" : null; },
+  });
+
+  def("slot", {
+    name: "Circuit fou", short: "Maintiens ✕ pour accélérer", theme: "bonbons", layout: "field", layoutOpts: { W: 20, D: 12.5 }, lockMove: true, buttons: { x: "gas" },
+    rule: "Course de 3 tours sur un circuit ovale. MAINTIENS ✕ pour accélérer et relâche avant les virages : si tu les prends trop vite, tu dérapes et tu repars de zéro !",
+    lane: (p) => p.idx, R: (i) => 2.3 + i * 0.95,
+    pos(s, r) {
+      const Ls = 8, Lc = Math.PI * r, T2 = 2 * Ls + 2 * Lc; s = ((s % T2) + T2) % T2;
+      if (s < Ls) return [-4 + s, r, 0, 1, 0];
+      if (s < Ls + Lc) { const f = Math.PI / 2 - (s - Ls) / r; return [4 + r * Math.cos(f), r * Math.sin(f), 1 / r, Math.sin(f), -Math.cos(f)]; }
+      if (s < 2 * Ls + Lc) { const u = s - Ls - Lc; return [4 - u, -r, 0, -1, 0]; }
+      const f = -Math.PI / 2 - (s - 2 * Ls - Lc) / r; return [-4 + r * Math.cos(f), r * Math.sin(f), 1 / r, Math.sin(f), -Math.cos(f)];
+    },
+    total(r) { return 16 + 2 * Math.PI * r; },
+    spots() { return players.map((p) => { const q = this.pos(0, this.R(this.lane(p))); return [q[0], q[1]]; }); },
+    start() {
+      this.order = 0; this.LIM = 26;
+      players.forEach((p) => { p.s = 0; p.v = 0; p.lap = 0; });
+      const stadium = (r) => { const sh = new THREE.Shape(); sh.moveTo(-4, -r); sh.lineTo(4, -r); sh.absarc(4, 0, r, -Math.PI / 2, Math.PI / 2, false); sh.lineTo(-4, r); sh.absarc(-4, 0, r, Math.PI / 2, Math.PI * 1.5, false); return sh; };
+      const outer = stadium(this.R(3) + 0.55), inner = stadium(this.R(0) - 0.55); outer.holes.push(inner);
+      const road = new THREE.Mesh(new THREE.ShapeGeometry(outer, 48), toon("#3a2d5a")); road.rotation.x = -Math.PI / 2; road.position.y = 0.02; road.receiveShadow = true; gameObjs.add(road);
+      for (let i = 0; i < 4; i++) {
+        const r = this.R(i), pts = []; for (let k = 0; k <= 160; k++) { const q = this.pos(k / 160 * this.total(r), r - 0.45); pts.push(new THREE.Vector3(q[0], 0.04, q[1])); }
+        gameObjs.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff })));
+      }
+      const r4 = this.R(3) + 0.45, pts = []; for (let k = 0; k <= 160; k++) { const q = this.pos(k / 160 * this.total(r4), r4); pts.push(new THREE.Vector3(q[0], 0.04, q[1])); }
+      gameObjs.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff })));
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 4.2), new THREE.MeshBasicMaterial({ color: lin("#241b3a") })); fl.rotation.x = -Math.PI / 2; fl.position.set(-4, 0.05, this.R(1.5)); gameObjs.add(fl);
+    },
+    onBegin() { players.forEach((p) => { p.s = 0; p.v = 0; p.lap = 0; p.spin = 0; }); },
+    update(dt) {
+      for (const p of players) {
+        if (p.out) continue;
+        const r = this.R(this.lane(p)), q0 = this.pos(p.s, r);
+        p.spin = Math.max(0, (p.spin || 0) - dt);
+        const gas = p.human ? !!(p.hold && p.hold.x) : !!p.botGas;
+        if (p.finished) p.v = Math.max(0, p.v - 8 * dt);
+        else if (p.spin > 0) p.v = 0;
+        else p.v = clamp(p.v + (gas ? 9 : -7) * dt, 0, 13);
+        if (q0[2] > 0 && p.v * p.v * q0[2] > this.LIM && !p.finished) { p.spin = 1.2; p.v = 0; popup("DÉRAPAGE !", p.x, 3, p.z, "#ff5a73", 1.3); SFX.fall(); burst(p.x, 0.6, p.z, "#ffffff", 8); }
+        p.s += p.v * dt;
+        const T2 = this.total(r); if (!p.finished && p.s >= T2 * 3) { p.finished = gameTime; this.order++; p.celebrate = true; SFX.win(); toast(`${p.name} termine ${this.order === 1 ? "premier" : this.order + "e"} !`); }
+        p.lap = Math.min(3, Math.floor(p.s / T2) + 1);
+        const q = this.pos(p.s, r); p.x = q[0]; p.z = q[1]; p.vx = q[3] * p.v; p.vz = q[4] * p.v;
+        p.face = p.spin > 0 ? p.face + dt * 15 : Math.atan2(q[3], q[4]);
+      }
+    },
+    done() { return timeLeft <= 0 || players.every((p) => p.finished || p.out); },
+    duration: 75,
+    score(p) { return p.finished ? 100000 - p.finished * 100 : p.s / this.total(this.R(this.lane(p))); },
+    value: (p) => (p.finished ? `${p.finished.toFixed(1)} s` : `Tour ${p.lap}/3`),
+    chip: (p) => (p.finished ? "ARRIVÉ" : `T${p.lap}/3`),
+    botGoal: (p) => [p.x, p.z],
+    botAct() { return null; },
+    botThinkExtra(p) {
+      const r = this.R(this.lane(p)), ahead = this.pos(p.s + Math.max(2, p.v * 0.5), r), here = this.pos(p.s, r);
+      const curv = Math.max(ahead[2], here[2]), vmax = curv > 0 ? Math.sqrt(this.LIM / curv) * (0.8 + 0.12 * p.skill) : 13;
+      p.botGas = p.v < vmax - 0.3;
+    },
+  });
+
+  def("cups", {
+    name: "Bonneteau", short: "Suis la gemme des yeux", theme: "prairie", layout: "field", buttons: { s: "dash", o: "punch" },
+    rule: "Une gemme se cache sous un des trois gobelets, qui se mélangent ensuite. Quand le mélange s'arrête, va sur le tapis devant le bon gobelet ! 4 manches, 1 point par bonne réponse.",
+    start() {
+      this.cups = [-3.2, 0, 3.2].map((x, i) => { const c = mk(new THREE.CylinderGeometry(0.75, 1, 1.6, 20), ["#ff5a3c", "#3d8bff", "#2fc46b"][i]); c.position.set(x, 0.8, -1.8); gameObjs.add(c); return { m: c, slot: i }; });
+      this.pads = [-3.2, 0, 3.2].map((x) => { const m = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.04, 1.2); gameObjs.add(m); return m; });
+      this.gem = mk(new THREE.OctahedronGeometry(0.35, 0), "#ff4fd8", { emissive: "#7a0060" }); this.gem.position.set(0, 0.35, -1.8); gameObjs.add(this.gem);
+      this.round = 0; this.newRound();
+    },
+    slotX: (i) => [-3.2, 0, 3.2][i],
+    newRound() {
+      this.round++; this.phase = "show"; this.t = 1.8; this.hold = Math.floor(Math.random() * 3);
+      this.cups.forEach((c) => { c.m.position.x = this.slotX(c.slot); });
+      this.swaps = 4 + this.round * 2; this.swapT = 0; this.swapDur = Math.max(0.22, 0.5 - this.round * 0.06); this.sw = null;
+      players.forEach((p) => { p.guess = null; });
+    },
+    update(dt, t) {
+      this.t -= dt;
+      const gc = this.cups[this.hold];
+      if (this.phase === "show") {
+        gc.m.position.y = 0.8 + Math.min(1.4, (1.8 - this.t) * 3) * (this.t > 0.4 ? 1 : this.t / 0.4);
+        this.gem.visible = true; this.gem.position.x = gc.m.position.x; this.gem.rotation.y += dt * 3;
+        if (this.t <= 0) { gc.m.position.y = 0.8; this.gem.visible = false; this.phase = "shuffle"; }
+      } else if (this.phase === "shuffle") {
+        if (!this.sw) {
+          if (this.swaps-- <= 0) { this.phase = "choose"; this.t = 4; toast("Choisis ton tapis !"); SFX.go(); return; }
+          const a = Math.floor(Math.random() * 3), b = (a + 1 + Math.floor(Math.random() * 2)) % 3;
+          this.sw = { a: this.cups.find((c) => c.slot === a), b: this.cups.find((c) => c.slot === b), t: 0 }; tone(400 + Math.random() * 200, 0.08, "triangle", 0.03);
+        }
+        const s = this.sw; s.t += dt / this.swapDur; const k = Math.min(1, s.t);
+        const xa = this.slotX(s.a.slot), xb = this.slotX(s.b.slot);
+        s.a.m.position.x = xa + (xb - xa) * k; s.a.m.position.z = -1.8 + Math.sin(k * Math.PI) * 1.2;
+        s.b.m.position.x = xb + (xa - xb) * k; s.b.m.position.z = -1.8 - Math.sin(k * Math.PI) * 1.2;
+        if (k >= 1) { const sa = s.a.slot; s.a.slot = s.b.slot; s.b.slot = sa; s.a.m.position.z = s.b.m.position.z = -1.8; this.sw = null; }
+      } else if (this.phase === "choose") {
+        this.pads.forEach((m, i) => { const on = standing().some((p) => Math.hypot(p.x - m.position.x, p.z - m.position.z) < 1.1); m.material.opacity = on ? 0.9 : 0.5; });
+        if (this.t <= 0) {
+          const right = gc.slot; this.phase = "reveal"; this.t = 2;
+          gc.m.position.y = 2.2; this.gem.visible = true; this.gem.position.x = gc.m.position.x;
+          for (const p of standing()) { const i = this.pads.findIndex((m) => Math.hypot(p.x - m.position.x, p.z - m.position.z) < 1.1); if (i === right) { p.gs++; popup("+1", p.x, 3, p.z, "#ffd23f", 1.3); SFX.coin(); p.celebrate = true; } else popup("RATÉ", p.x, 3, p.z, "#ff5a73", 1.1); }
+        }
+      } else if (this.phase === "reveal") {
+        this.gem.rotation.y += dt * 4;
+        if (this.t <= 0) { gc.m.position.y = 0.8; players.forEach((p) => (p.celebrate = false)); if (this.round >= 4) this.over = true; else this.newRound(); }
+      }
+    },
+    done() { return !!this.over; },
+    score: (p) => p.gs, value: (p) => `${p.gs} / 4`, chip: (p) => p.gs,
+    botGoal(p) {
+      if (this.phase !== "choose") return [p.x * 0.9, 1.2];
+      if (p.guess == null) p.guess = Math.random() < 0.35 + 0.3 * p.skill ? this.cups[this.hold].slot : Math.floor(Math.random() * 3);
+      return [this.slotX(p.guess), 1.2];
+    },
+    botDash: () => false,
+  });
+
+  def("wall", Object.assign({}, survival, {
+    name: "Mur troué", short: "Place-toi dans les trous", theme: "espace", layout: "field", layoutOpts: { W: 13.2, D: 8.8, walls: true },
+    rule: "Un mur géant va s'écraser sur l'arène ! Les cases vertes sont des trous : place-toi dedans avant qu'il tombe. Bouscule les autres s'il n'y a pas de place pour tout le monde…",
+    start() { this.round = 0; this.phase = "wait"; this.t = 1.5; this.marks = []; this.slab = null; },
+    cell(i) { const nx = 6, cs = 2.2; return [L.cx - L.W / 2 + (i % nx + 0.5) * cs, L.cz - L.D / 2 + (Math.floor(i / nx) + 0.5) * cs]; },
+    update(dt) {
+      this.t -= dt;
+      if (this.phase === "wait" && this.t <= 0) {
+        this.round++; this.phase = "warn"; this.t = Math.max(1.8, 3.4 - this.round * 0.2);
+        const n = this.round < 3 ? 4 : this.round < 6 ? 3 : 2; this.holes = shuffle([...Array(24).keys()]).slice(0, n);
+        this.marks = this.holes.map((i) => { const [x, z] = this.cell(i), m = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 2.05), new THREE.MeshBasicMaterial({ color: lin("#2fc46b"), transparent: true, opacity: 0.75 })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.05, z); gameObjs.add(m); return m; });
+        this.slab = new THREE.Group();
+        for (let i = 0; i < 24; i++) { if (this.holes.includes(i)) continue; const [x, z] = this.cell(i), b = mk(new THREE.BoxGeometry(2.2, 0.5, 2.2), i % 2 ? "#8a95b0" : "#9aa5c0", { ol: 0.03 }); b.position.set(x, 0, z); this.slab.add(b); }
+        this.slab.position.y = 14; gameObjs.add(this.slab); toast("Va dans un trou vert !"); SFX.ui();
+      } else if (this.phase === "warn") {
+        this.slab.visible = this.t < 0.5;
+        if (this.t < 0.5) this.slab.position.y = 0.25 + 9 * Math.max(0, this.t / 0.5) ** 2;
+        if (this.t <= 0) {
+          this.slab.position.y = 0.25; shake = 0.6; SFX.boom(); hitStop(0.08);
+          for (const p of alive()) {
+            const ok = this.holes.some((i) => { const [x, z] = this.cell(i); return Math.abs(p.x - x) < 1.1 - 0.25 && Math.abs(p.z - z) < 1.1 - 0.25; });
+            if (!ok) { knockOut(p, p.x, p.z + 0.01); popup("PLAF !", p.x, 2, p.z, "#ff5a73", 1.5); }
+          }
+          this.phase = "lift"; this.t = 1.2;
+        }
+      } else if (this.phase === "lift") {
+        this.slab.position.y += dt * 14;
+        if (this.t <= 0) { gameObjs.remove(this.slab); this.marks.forEach((m) => gameObjs.remove(m)); this.marks = []; this.phase = "wait"; this.t = 0.8; }
+      }
+    },
+    done() { return alive().length <= 1 || this.round > 12; },
+    botGoal(p) {
+      if (this.phase !== "warn") return wander(p, 1.5);
+      if (p.holeRound !== this.round) { p.holeRound = this.round; p.react = gameTime + rnd(0.2, 0.7) / p.skill; p.hole = null; }
+      if (gameTime < p.react) return [p.x, p.z];
+      if (p.hole == null) { const hs = this.holes.map((i) => this.cell(i)).sort((a, b) => Math.hypot(a[0] - p.x, a[1] - p.z) - Math.hypot(b[0] - p.x, b[1] - p.z)); p.hole = hs[0]; }
+      return p.hole;
+    },
+  }));
+
+  def("rhythm", {
+    name: "Rythme robot", short: "Appuie en rythme", theme: "bonbons", lockMove: true, duration: 32,
+    buttons: { t: "n_t", o: "n_o", x: "n_x", s: "n_s" },
+    rule: "Des notes descendent dans les 4 colonnes. Appuie sur le bon bouton (△ ○ ✕ □) quand la note touche la ligne du bas. Pile au bon moment : 2 points, presque : 1 point.",
+    spots() { return players.map((p, i) => [(i - (players.length - 1) / 2) * 2.2, 1.2]); },
+    start() {
+      this.notes = []; const lanes = ["t", "o", "x", "s"], beat = 0.5;
+      for (let tt = 2; tt < 30; tt += beat) { if (Math.random() < 0.82) this.notes.push({ t: tt, lane: pick(lanes), hit: new Set(), bot: false }); if (tt > 12 && Math.random() < 0.15) this.notes.push({ t: tt + beat / 2, lane: pick(lanes), hit: new Set(), bot: false }); }
+      ui().innerHTML = `<div class="rhythm">${lanes.map((l) => `<div class="lane" data-l="${l}"><div class="hitbar" style="border-color:${SYMCOL[l]};color:${SYMCOL[l]}">${SYM[l]}</div></div>`).join("")}</div>`;
+      this.els = {}; ui().querySelectorAll(".lane").forEach((el) => (this.els[el.dataset.l] = el));
+      for (const n of this.notes) { const d = document.createElement("div"); d.className = "note"; d.style.background = SYMCOL[n.lane]; d.textContent = SYM[n.lane]; d.style.display = "none"; this.els[n.lane].appendChild(d); n.el = d; }
+      this.beat = 0;
+    },
+    onBegin() { players.forEach((p) => { p.gs = 0; p.celebrate = true; }); },
+    press(p, lane) {
+      let best = null, bd = 0.2;
+      for (const n of this.notes) { if (n.lane !== lane || n.hit.has(p)) continue; const d = Math.abs(n.t - gameTime); if (d < bd) { bd = d; best = n; } }
+      if (!best) { popup("×", p.x, 3, p.z, "#ff5a73", 0.9); return; }
+      best.hit.add(p); const pts = bd < 0.08 ? 2 : 1; p.gs += pts; popup(pts === 2 ? "PARFAIT" : "BIEN", p.x, 3, p.z, pts === 2 ? "#ffd23f" : "#9be7ff", 1); p.sq = 0.3;
+    },
+    custom: { n_t(p) { this.press(p, "t"); }, n_o(p) { this.press(p, "o"); }, n_x(p) { this.press(p, "x"); }, n_s(p) { this.press(p, "s"); } },
+    update() {
+      if (gameTime > this.beat) { this.beat += 0.5; tone(this.beat % 2 < 0.5 ? 220 : 330, 0.08, "triangle", 0.05); noise(0.04, 0.03, 6000, 0, 0, "highpass"); }
+      for (const n of this.notes) {
+        const d = n.t - gameTime;
+        if (d > 1.6 || d < -0.25) { n.el.style.display = "none"; } else { n.el.style.display = ""; n.el.style.top = `calc(${(1 - d / 1.6) * 100}% - 46px)`; n.el.style.opacity = d < -0.1 ? 0.3 : 1; }
+        if (!n.bot && d < 0) { n.bot = true; for (const p of players) if (!p.human && Math.random() < 0.55 + 0.3 * p.skill) { const pts = Math.random() < 0.5 ? 2 : 1; p.gs += pts; } }
+      }
+    },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} points`, chip: (p) => p.gs,
+    botGoal: (p) => [p.x, p.z], botAct: () => null,
+  });
+
+  def("snowfight", Object.assign({}, survival, {
+    name: "Bataille de neige", short: "Lance des boules de neige", theme: "banquise", items: true, buttons: { o: "throw", t: "guard", x: "jump", s: "dash" },
+    rule: "○ lance une boule de neige droit devant toi. 3 touches et tu es éliminé ! △ Bouclier arrête les boules, ✕ saute par-dessus. Le dernier debout gagne.",
+    start() { this.balls = []; players.forEach((p) => (p.hp = 3)); },
+    onBegin() { players.forEach((p) => (p.hp = 3)); },
+    custom: { throw(p) {
+      if ((p.cds.throw || 0) > 0 || p.holding) return; p.cds.throw = 0.7; p.punchT = 0.4; SFX.whiff();
+      const fx = Math.sin(p.face), fz = Math.cos(p.face), m = mk(new THREE.SphereGeometry(0.28, 12, 8), "#ffffff", { ol: 0.03 });
+      m.position.set(p.x + fx * 0.9, p.y + 1.5, p.z + fz * 0.9); gameObjs.add(m);
+      this.balls.push({ m, vx: fx * 15, vz: fz * 15, vy: 2.2, owner: p, life: 1.4, big: p.powT > 0 });
+    } },
+    update(dt) {
+      for (let i = this.balls.length - 1; i >= 0; i--) {
+        const b = this.balls[i]; b.life -= dt; b.vy -= 6 * dt;
+        b.m.position.x += b.vx * dt; b.m.position.y += b.vy * dt; b.m.position.z += b.vz * dt;
+        let hit = false;
+        for (const p of standing()) {
+          if (p === b.owner || p.heldBy) continue;
+          const dx = p.x - b.m.position.x, dz = p.z - b.m.position.z, dy = b.m.position.y - (p.y + 1.2);
+          if (Math.hypot(dx, dz) > 0.75 * p.size || Math.abs(dy) > 1.3) continue;
+          hit = true;
+          if (p.guardT > 0) { SFX.block(); popup("BLOC", p.x, 3, p.z, "#9be7ff", 1); break; }
+          p.hp -= b.big ? 2 : 1; p.vx += b.vx * 0.5; p.vz += b.vz * 0.5; p.hitT = 0.4; p.sq = 0.5; SFX.punch(); burst(b.m.position.x, b.m.position.y, b.m.position.z, "#ffffff", 8); hitStop(0.05);
+          popup(p.hp > 0 ? "PAF !" : "K.O. !", p.x, 3, p.z, "#9be7ff", 1.3);
+          if (p.hp <= 0) knockOut(p, b.m.position.x, b.m.position.z);
+          break;
+        }
+        if (hit || b.life <= 0 || b.m.position.y < 0) { if (!hit) dust(b.m.position.x, b.m.position.z, "#ffffff", 3); gameObjs.remove(b.m); this.balls.splice(i, 1); }
+      }
+    },
+    done: () => alive().length <= 1,
+    score: (p) => (p.ko || p.out || p.sinking ? p.outAt : 1000 + p.hp),
+    value: (p, r) => (p.out || p.ko ? "Éliminé" : lives(p.hp)),
+    chip: (p) => (p.out || p.ko ? "✕" : lives(p.hp)),
+    botGoal(p) {
+      const [f, d] = nearestFoe(p); if (!f) return wander(p, 2);
+      const a = Math.atan2(p.z - f.z, p.x - f.x) + 0.5; return [f.x + Math.cos(a) * 4, f.z + Math.sin(a) * 4];
+    },
+    botAct(p) {
+      const [f, d] = nearestFoe(p);
+      if (this.balls.some((b) => b.owner !== p && Math.hypot(b.m.position.x - p.x, b.m.position.z - p.z) < 3) && Math.random() < 0.35) return Math.random() < 0.5 ? "guard" : "jump";
+      if (f && d < 8 && (p.cds.throw || 0) <= 0 && Math.random() < 0.5 * p.skill) { const tt = d / 15; p.face = Math.atan2(f.x + f.vx * tt - p.x, f.z + f.vz * tt - p.z); return "throw"; }
+      return null;
+    },
+  }));
+
+  def("blocks", {
+    name: "Blocs à pièces", short: "Tape les blocs en sautant", theme: "plage", layout: "field", duration: 30, buttons: { x: "jump", s: "dash", o: "punch" },
+    rule: "Des blocs ? flottent au-dessus de l'arène. ✕ Saute dessous pour les frapper de la tête et faire sortir 1 à 3 pièces ! Chaque bloc s'épuise après 3 coups. Bouscule les autres pour leur piquer la place.",
+    start() { this.list = []; for (let k = 0; k < 5; k++) this.spawn(); },
+    spawn() {
+      let x, z; for (let k = 0; k < 20; k++) { [x, z] = randomSpot(1.4); if (this.list.every((b) => Math.hypot(b.x - x, b.z - z) > 2.4)) break; }
+      const m = mk(new THREE.BoxGeometry(1, 1, 1), "#ffffff", { mat: toon("#ffffff", { map: qTex, emissive: lin("#2a1e00") }), ol: 0.05 }); m.position.set(x, 3.4, z); gameObjs.add(m);
+      this.list.push({ m, x, z, left: 3, bump: 0 });
+    },
+    update(dt) {
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const b = this.list[i]; b.bump = Math.max(0, b.bump - dt * 4); b.m.position.y = 3.4 + Math.sin(b.bump * Math.PI) * 0.4;
+        const p = standing().find((q) => q.vy > 0 && Math.hypot(q.x - b.x, q.z - b.z) < 0.75 && q.y + 2.3 * q.size > 2.85);
+        if (!p) continue;
+        p.vy = -2; b.bump = 1; b.left--; const n = 1 + Math.floor(Math.random() * 3); p.gs += n;
+        SFX.coin(); popup(`+${n}`, b.x, 4.6, b.z, "#ffd23f", 1.3); burst(b.x, 4, b.z, "#ffd23f", 6);
+        if (b.left <= 0) { b.m.material.color.copy(lin("#a0703a")); b.m.material.map = null; b.m.material.needsUpdate = true; setTimeout(() => { if (G === GAMES.blocks) { gameObjs.remove(b.m); const k = this.list.indexOf(b); if (k >= 0) { this.list.splice(k, 1); this.spawn(); } } }, 900); b.left = -99; }
+      }
+    },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} pièces`, chip: (p) => p.gs,
+    botGoal(p) { let best = null, bd = Infinity; for (const b of this.list) { if (b.left <= 0) continue; const d = Math.hypot(b.x - p.x, b.z - p.z); if (d < bd) { bd = d; best = b; } } p.target = best; return best ? [best.x, best.z] : wander(p, 2); },
+    botAct(p) { const b = p.target; return b && b.left > 0 && p.y <= 0.001 && Math.hypot(b.x - p.x, b.z - p.z) < 0.6 && Math.random() < 0.7 ? "jump" : null; },
+  });
+
+  def("pump", {
+    name: "Ballon express", short: "Gonfle ton ballon le premier", theme: "bonbons", layout: "field", lockMove: true, duration: 25,
+    buttons: { x: "mash", o: "mash", s: "mash", t: "mash" },
+    rule: "Chacun sa pompe : martèle n'importe quel bouton pour gonfler ton ballon. Le premier qui le fait éclater gagne !",
+    spots() { return players.map((p, i) => [(i - (players.length - 1) / 2) * 3, 1.6]); },
+    start() {
+      this.won = false; const sp = this.spots();
+      this.balloons = players.map((p, i) => {
+        const g = new THREE.Group(); const b = mk(new THREE.SphereGeometry(0.5, 18, 14), p.color, { ol: 0.04 }); b.scale.y = 1.15; g.add(b);
+        g.position.set(sp[i][0], 3, sp[i][1] - 1.3); gameObjs.add(g);
+        const pump = mk(new THREE.CylinderGeometry(0.25, 0.3, 1.2, 12), "#9aa5c0"); pump.position.set(sp[i][0], 0.6, sp[i][1] - 1.3); gameObjs.add(pump);
+        return { g, b };
+      });
+    },
+    onBegin() { players.forEach((p) => (p.gs = 0)); },
+    custom: { mash(p) {
+      if (this.won || state !== "play") return; const i = players.indexOf(p); p.gs++; p.punchT = 0.15; p.sq = 0.3;
+      const bl = this.balloons[i]; bl.g.scale.setScalar(1 + p.gs * 0.06); if (p.gs % 4 === 0) tone(300 + p.gs * 12, 0.05, "sine", 0.03);
+      if (p.gs >= 45) { this.won = true; gameObjs.remove(bl.g); burst(bl.g.position.x, bl.g.position.y, bl.g.position.z, p.color, 26); SFX.boom(); shake = 0.5; popup("POP !", p.x, 4, p.z, "#ffffff", 2); p.gs = 100; }
+    } },
+    update(dt, t) { this.balloons.forEach((bl, i) => { bl.g.position.y = 3 + Math.sin(t * 3 + i) * 0.1; }); },
+    done() { return this.won || timeLeft <= 0; },
+    score: (p) => p.gs, value: (p) => (p.gs >= 100 ? "POP !" : `${Math.round(p.gs / 45 * 100)} %`), chip: (p) => (p.gs >= 100 ? "POP" : `${Math.round(p.gs / 45 * 100)} %`),
+    botGoal: (p) => [p.x, p.z],
+    botAct(p) { return Math.random() < 0.72 * p.skill ? "mash" : null; },
+  });
+
+  def("backpack", {
+    name: "Sac à dos", short: "Vole les pièces dans le dos", theme: "volcan", respawn: true, duration: 35, items: true, buttons: { o: "punch", s: "dash", x: "jump", t: "guard" },
+    rule: "Tout le monde commence avec 10 pièces dans son sac. Frappe un adversaire DANS LE DOS avec ○ pour lui en voler une ! De face, tu le repousses seulement. Garde l'œil sur tes arrières.",
+    start() { players.forEach((p) => (p.gs = 10)); },
+    onBegin() { players.forEach((p) => (p.gs = 10)); },
+    onHit(v, a) {
+      if (!a || v.gs <= 0) return;
+      const fx = Math.sin(v.face), fz = Math.cos(v.face), dx = v.x - a.x, dz = v.z - a.z, d = Math.hypot(dx, dz) || 1;
+      if ((dx * fx + dz * fz) / d > 0.25) { const n = Math.min(v.gs, a.powT > 0 ? 2 : 1); v.gs -= n; a.gs += n; popup(`VOL ! +${n}`, a.x, 3.2, a.z, "#ffd23f", 1.3); SFX.coin(); }
+    },
+    onFall(p) { p.gs = Math.max(0, p.gs - 2); },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} pièces`, chip: (p) => p.gs,
+    botGoal(p) { const [f] = nearestFoe(p, (q) => q.gs > 0); if (!f) return wander(p, 2); return [f.x - Math.sin(f.face) * 1.2, f.z - Math.cos(f.face) * 1.2]; },
+    botAct(p) {
+      const [f, d] = nearestFoe(p); if (!f || d > 1.8) return null;
+      const behind = ((p.x - f.x) * Math.sin(f.face) + (p.z - f.z) * Math.cos(f.face)) / (d || 1) < -0.2;
+      if (behind && Math.random() < 0.6) { p.face = Math.atan2(f.x - p.x, f.z - p.z); return "punch"; }
+      return null;
+    },
+    botDash: () => false,
+  });
+
   const ORDER = Object.keys(GAMES);
 
   // ---------- Actions des boutons ----------
@@ -1934,6 +2418,7 @@ button.chip { cursor: pointer; }
       } else if (p.holdT > 0.6) p.acts.add("grab");
       return;
     }
+    if (G.botThinkExtra) G.botThinkExtra(p);
     if (G.botInput) { const [ix, iz, a] = G.botInput(p); p.inX = ix; p.inZ = iz; if (a) p.acts.add(a === true ? "jump" : a); return; }
     let [tx, tz] = G.botGoal(p);
     if (G.items && items.length) { let best = null, bd = 4.5; for (const it of items) { const d = Math.hypot(it.x - p.x, it.z - p.z); if (d < bd) { bd = d; best = it; } } if (best && p.skill > 0.95) { tx = best.x; tz = best.z; } }
@@ -2006,7 +2491,7 @@ button.chip { cursor: pointer; }
         const sp = Math.hypot(p.vx, p.vz); if (p.dashT <= 0 && p.hitT <= 0 && sp > maxv) { p.vx *= maxv / sp; p.vz *= maxv / sp; }
       }
       p.acts.clear();
-      p.x += p.vx * dt; p.z += p.vz * dt;
+      if (!G.lockMove) { p.x += p.vx * dt; p.z += p.vz * dt; }
       if (L.walls && !p.sinking) {
         const hx = L.W / 2 - PR * 0.7, hz = L.D / 2 - PR * 0.7;
         if (Math.abs(p.x - L.cx) > hx) { p.x = L.cx + Math.sign(p.x - L.cx) * hx; p.vx *= -0.3; }
@@ -2036,7 +2521,7 @@ button.chip { cursor: pointer; }
     // Collisions entre robots
     for (let i = 0; i < players.length; i++) for (let j = i + 1; j < players.length; j++) {
       const a = players[i], b = players[j];
-      if (!active(a) || !active(b) || a.heldBy || b.heldBy || Math.abs(a.y - b.y) > 1.2) continue;
+      if (G.lockMove || !active(a) || !active(b) || a.heldBy || b.heldBy || Math.abs(a.y - b.y) > 1.2) continue;
       const rr = PR * (a.size + b.size);
       let nx = b.x - a.x, nz = b.z - a.z; const d = Math.hypot(nx, nz);
       if (d >= rr || d === 0) continue;
@@ -2195,7 +2680,7 @@ button.chip { cursor: pointer; }
   let mode = "tour", queue = [], qi = 0, practiceDone = null;
   function setupGame(key) {
     G = GAMES[key];
-    clearGroup(gameObjs); items = []; itemNext = 4;
+    clearGroup(gameObjs); items = []; itemNext = 4; $("gameUI").innerHTML = "";
     const lay = G.layout === "grid" ? G.grid() : Object.assign(LAYOUTS[G.layout](), G.layoutOpts || {});
     buildArena(G.theme, lay, G.layout === "grid");
     music.theme = G.theme;
@@ -2225,7 +2710,7 @@ button.chip { cursor: pointer; }
     state = "play"; banner("Partez !", 700);
     await finished;
     await sleep(900);
-    state = "results";
+    state = "results"; $("gameUI").innerHTML = "";
     const rows = rankByScore();
     rows.forEach((r) => {
       r.pts = mode === "tour" ? POINTS[r.rank] : 0; r.p.total += r.pts; r.p.celebrate = r.rank === 0;
@@ -2277,7 +2762,7 @@ button.chip { cursor: pointer; }
     $("againBtn").onclick = () => after(runTournament); $("menuBtn2").onclick = () => after(goMenu);
   }
   function menuScene() { setupGame("sumo"); state = "menu"; G = GAMES.sumo; }
-  function goMenu() { menuScene(); $("pads").innerHTML = ""; renderJetons(); show("setup"); }
+  function goMenu() { menuScene(); $("gameUI").innerHTML = ""; $("pads").innerHTML = ""; renderJetons(); show("setup"); }
   function openPick() {
     state = "menu";
     $("games").innerHTML = ORDER.map((k) => `<button class="game" data-k="${k}"><span class="tag">${THEMES[GAMES[k].theme].name}</span><b>${GAMES[k].name}</b><span>${GAMES[k].short}</span></button>`).join("");
