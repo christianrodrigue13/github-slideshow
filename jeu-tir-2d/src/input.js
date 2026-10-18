@@ -41,20 +41,22 @@ export class Input {
   }
 
   // Taille de l'écran en pixels CSS (appelé par main.js au redimensionnement)
-  resize(w, h) {
+  resize(w, h, safeRight = 0) {
     this.w = w;
     this.h = h;
+    this.safeR = safeRight;           // marge de l'encoche à droite
     this.buttons = this.layoutButtons();
   }
 
   // Position des boutons tactiles (en pixels CSS)
   layoutButtons() {
     const r = Math.max(24, this.h * 0.07);
+    const right = this.w - (this.safeR || 0);
     const m = 14 + r;               // marge depuis le bord
     return {
-      pause:  { x: this.w - 34, y: 34, r: 22, label: 'II' },
-      reload: { x: this.w - m, y: this.h * 0.36, r, label: 'R' },
-      swap:   { x: this.w - m - r * 2.5, y: this.h * 0.30, r, label: '⇄' },
+      pause:  { x: right - 34, y: 34, r: 22, label: 'II' },
+      reload: { x: right - m, y: this.h * 0.36, r, label: 'R' },
+      swap:   { x: right - m - r * 2.5, y: this.h * 0.30, r, label: '⇄' },
     };
   }
 

@@ -36,6 +36,29 @@ export class Fighter {
     this.weapons = CONFIG.weapons.map((def) => new Weapon(def));
     this.weaponIndex = 0;
     this.muzzleFlash = 0;        // durée restante de l'éclair au bout du canon
+
+    // Partie
+    this.kills = 0;
+    this.deaths = 0;
+    this.respawnTimer = 0;       // temps avant de réapparaître (si mort)
+    this.protectTimer = 0;       // invincibilité après réapparition
+    this.hitFlash = 0;           // clignotement blanc quand on est touché
+    this.lastAttacker = null;    // dernier tireur (pour les chutes dans le vide)
+    this.lastAttackTime = -999;
+  }
+
+  // Réapparition : tout est remis à neuf
+  respawn(spawn) {
+    this.placeAt(spawn.x, spawn.y);
+    this.health = CONFIG.fighter.maxHealth;
+    this.alive = true;
+    this.fuel = CONFIG.jetpack.maxFuel;
+    for (const w of this.weapons) w.refill();
+    this.weaponIndex = 0;
+    this.protectTimer = CONFIG.rules.spawnProtection;
+    this.hitFlash = 0;
+    this.jetting = false;
+    this.lastAttacker = null;
   }
 
   get weapon() { return this.weapons[this.weaponIndex]; }
@@ -60,6 +83,8 @@ export class Fighter {
   update(cmd, dt, game) {
     if (!this.alive) return;
     const map = game.map;
+    if (this.protectTimer > 0) this.protectTimer -= dt;
+    if (this.hitFlash > 0) this.hitFlash -= dt;
     const F = CONFIG.fighter;
     const J = CONFIG.jetpack;
 
@@ -143,6 +168,7 @@ export class Fighter {
     this.vx -= Math.cos(this.aimAngle) * def.recoil;
     if (!this.grounded) this.vy -= Math.sin(this.aimAngle) * def.recoil * 0.6;
     this.muzzleFlash = 0.05;
+    this.protectTimer = 0;                   // tirer annule l'invincibilité
     game.onFighterEvent(this, 'fire');
   }
 
@@ -180,6 +206,10 @@ export class Fighter {
   draw(ctx) {
     if (!this.alive) return;
     const x = this.x, y = this.y, w = this.w, h = this.h;
+    // Invincible : le personnage clignote
+    if (this.protectTimer > 0 && Math.floor(this.protectTimer * 10) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+    }
     const back = this.facing === 1 ? x - 7 : x + w - 1;
 
     // Flamme du jetpack
@@ -197,8 +227,8 @@ export class Fighter {
     ctx.fillStyle = '#7d8597';
     ctx.fillRect(back, y + h * 0.25, 8, h * 0.42);
 
-    // Corps
-    ctx.fillStyle = this.color;
+    // Corps (blanc pendant un instant quand on est touché)
+    ctx.fillStyle = this.hitFlash > 0 ? '#ffffff' : this.color;
     roundRect(ctx, x, y + 12, w, h - 12, 6);
     // Tête
     ctx.beginPath();
@@ -225,6 +255,21 @@ export class Fighter {
       ctx.fill();
     }
     ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // Nom et petite barre de vie au-dessus des bots
+    if (this.isBot) {
+      const ratio = this.health / CONFIG.fighter.maxHealth;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x - 7, y - 14, w + 14, 5);
+      ctx.fillStyle = ratio > 0.35 ? '#69db7c' : '#ff6b6b';
+      ctx.fillRect(x - 7, y - 14, (w + 14) * ratio, 5);
+      ctx.fillStyle = this.color;
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(this.name, x + w / 2, y - 17);
+    }
   }
 }
 

@@ -60,4 +60,13 @@ html, body {
   #rotate { display: flex; }
 }
 
+/* Sonde invisible : main.js y lit la taille des encoches des téléphones */
+#safe-probe {
+  position: fixed;
+  visibility: hidden;
+  pointer-events: none;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
 .nojs { color: #fff; text-align: center; margin-top: 40vh; }

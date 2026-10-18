@@ -87,6 +87,7 @@ export const CONFIG = {
     shotgunDistance: 220,    // en dessous, ils sortent le fusil à pompe
     burstTime: 1.0,          // durée d'une rafale
     burstPause: 0.55,        // pause entre deux rafales
+    playerPreference: 1.3,   // >1 : les bots s'en prennent un peu plus à toi
     names: ['Rouille', 'Cobalt', 'Mangue', 'Pixel', 'Orage'],
     colors: ['#ff6b6b', '#4dabf7', '#ffa94d', '#b197fc', '#69db7c'],
   },

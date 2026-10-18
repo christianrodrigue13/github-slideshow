@@ -1,0 +1,192 @@
+// =====================================================================
+// bot.js — Le "cerveau" d'un bot. Il observe la partie et fabrique la
+// même commande qu'un joueur humain ({ moveX, up, aimX, aimY, fire… }).
+// Le personnage lui-même (player.js) est identique pour tout le monde.
+// =====================================================================
+
+import { CONFIG } from './config.js';
+
+export class BotBrain {
+  constructor(fighter) {
+    this.f = fighter;
+    this.target = null;
+    this.retargetTimer = 0;
+    this.seeTimer = 0;          // depuis combien de temps il voit sa cible
+    this.wanderDir = Math.random() < 0.5 ? -1 : 1;
+    this.wanderTimer = 0;
+    this.flying = false;        // phase de vol au jetpack en cours
+    this.aimOffset = 0;         // erreur de visée actuelle
+    this.aimTimer = 0;
+    this.burstTimer = Math.random();
+    this.switchCooldown = 0;
+    this.stuckTimer = 0;
+    this.lastX = 0;
+    this.aim = { x: 1, y: 0 };
+    this.crossing = false;      // en train de traverser un trou en volant
+    this.crossDir = 1;
+    this.climbTimer = 0;        // vol forcé pour passer un obstacle
+  }
+
+  // Appelée à chaque réapparition
+  reset() {
+    this.target = null;
+    this.seeTimer = 0;
+    this.flying = false;
+  }
+
+  think(dt, game) {
+    const me = this.f;
+    const B = CONFIG.bots;
+    const map = game.map;
+    const cmd = { moveX: 0, up: false, aimX: this.aim.x, aimY: this.aim.y,
+                  fire: false, switchWeapon: false, reload: false };
+    if (!me.alive) return cmd;
+
+    // ---------- 1. Choisir une cible ----------
+    this.retargetTimer -= dt;
+    if (this.retargetTimer <= 0 || !this.target || !this.target.alive) {
+      this.target = this.pickTarget(game);
+      this.retargetTimer = 0.5 + Math.random() * 0.5;
+    }
+    const t = this.target;
+    let visible = false, dx = 0, dy = 0, dist = Infinity;
+    if (t) {
+      dx = t.cx - me.cx;
+      dy = t.cy - me.cy;
+      dist = Math.hypot(dx, dy);
+      visible = dist < B.sightRange &&
+                map.lineOfSight(me.shoulderX, me.shoulderY, t.cx, t.cy);
+    }
+    this.seeTimer = visible ? this.seeTimer + dt : 0;
+
+    // ---------- 2. Se déplacer ----------
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0) {
+      this.wanderDir = Math.random() < 0.5 ? -1 : 1;
+      this.wanderTimer = 0.8 + Math.random() * 1.5;
+    }
+    let dir = this.wanderDir;
+    let wantUp = false;
+    if (t) {
+      const adx = Math.abs(dx);
+      if (!visible) {
+        dir = Math.sign(dx) || dir;                  // aller la chercher
+        if (dy < -80) wantUp = true;                 // elle est plus haut
+      } else if (adx > B.preferredDistance) {
+        dir = Math.sign(dx);                         // se rapprocher
+      } else if (adx < B.preferredDistance * 0.45) {
+        dir = -Math.sign(dx) || dir;                 // reculer un peu
+      }                                              // sinon : on "danse"
+      if (dy < -120) wantUp = true;
+    }
+
+    // Phases de vol : on décolle avec assez de carburant, on arrête
+    // quand on est à bonne hauteur ou presque à sec
+    if (wantUp && !this.flying && me.fuel > 40) this.flying = true;
+    if (this.flying && (me.fuel < 8 || !wantUp || (t && me.cy < t.cy - 30))) this.flying = false;
+
+    // Bloqué contre un mur ? On saute / vole par-dessus
+    if (Math.abs(me.x - this.lastX) < 0.5) this.stuckTimer += dt;
+    else this.stuckTimer = 0;
+    this.lastX = me.x;
+    // (on vole alors un petit moment, quelle que soit la hauteur de la cible)
+    if (this.stuckTimer > 0.2) this.climbTimer = 0.5;
+    if (this.stuckTimer > 2) { this.wanderDir = -dir; dir = -dir; this.stuckTimer = 0; }
+    if (this.climbTimer > 0) this.climbTimer -= dt;
+
+    // ---------- 3. Éviter le vide ----------
+    const feet = me.y + me.h;
+    const aheadX = me.cx + dir * (me.w / 2 + 30);
+    if (me.grounded) this.crossing = false;
+    if (me.grounded && map.groundBelow(aheadX, feet - 4) === Infinity) {
+      if (t && Math.sign(dx) === dir && me.fuel > 60) {
+        this.crossing = true;                        // la cible est de l'autre côté :
+        this.crossDir = dir;                         // on traverse le trou en volant
+      } else {
+        dir = -dir;                                  // sinon : demi-tour
+        this.wanderDir = dir;
+      }
+    }
+    // En l'air : ne pas s'avancer au-dessus d'un trou (sauf traversée voulue)
+    if (!me.grounded && !this.crossing && map.groundBelow(aheadX, feet) === Infinity) {
+      dir = this.nearestGroundDir(map, me.cx, feet) || -dir;
+    }
+    if (!me.grounded && map.groundBelow(me.cx, feet) === Infinity) {
+      if (this.crossing && me.fuel > 15) {
+        dir = this.crossDir;                         // on continue la traversée
+        cmd.up = me.vy > -50;                        // en gardant l'altitude
+      } else {
+        // Au-dessus du vide : on remonte et on file vers le sol le plus proche
+        dir = this.nearestGroundDir(map, me.cx, feet) || dir;
+        cmd.up = me.fuel > 0;
+        this.crossing = false;
+      }
+      this.flying = false;
+    }
+
+    cmd.moveX = dir;
+    if (this.flying || this.climbTimer > 0 || (me.grounded && (wantUp || this.crossing))) cmd.up = true;
+
+    // ---------- 4. Viser ----------
+    this.aimTimer -= dt;
+    if (this.aimTimer <= 0) {
+      // L'erreur de visée change régulièrement → précision réglable
+      this.aimOffset = (Math.random() * 2 - 1) * B.aimError;
+      this.aimTimer = 0.25 + Math.random() * 0.25;
+    }
+    if (t && visible) {
+      const a = Math.atan2(t.cy - me.shoulderY, t.cx - me.shoulderX) + this.aimOffset;
+      this.aim.x = Math.cos(a); this.aim.y = Math.sin(a);
+    } else if (dir) {
+      this.aim.x = dir; this.aim.y = 0;
+    }
+    cmd.aimX = this.aim.x; cmd.aimY = this.aim.y;
+
+    // ---------- 5. Choisir l'arme ----------
+    this.switchCooldown -= dt;
+    const isShotgun = me.weapon.def.pellets > 1;
+    if (this.switchCooldown <= 0 && visible) {
+      if ((!isShotgun && dist < B.shotgunDistance) ||
+          (isShotgun && dist > B.shotgunDistance * 1.6)) {
+        cmd.switchWeapon = true;
+        this.switchCooldown = 1.5;
+      }
+    }
+
+    // ---------- 6. Tirer (par rafales) ----------
+    this.burstTimer += dt;
+    const cycle = B.burstTime + B.burstPause;
+    if (this.burstTimer > cycle) this.burstTimer -= cycle;
+    const inBurst = this.burstTimer < B.burstTime;
+    if (visible && this.seeTimer >= B.reactionTime && inBurst &&
+        dist < me.weapon.def.range * 0.9) {
+      cmd.fire = true;
+    }
+    // Recharge au calme
+    if (!visible && me.weapon.ammo < me.weapon.def.magazine * 0.4) cmd.reload = true;
+
+    return cmd;
+  }
+
+  // Ennemi le plus proche (le joueur humain compte un peu plus "près")
+  pickTarget(game) {
+    const me = this.f;
+    let best = null, bestScore = Infinity;
+    for (const o of game.fighters) {
+      if (o === me || !o.alive) continue;
+      let d = Math.hypot(o.cx - me.cx, o.cy - me.cy);
+      if (!o.isBot) d /= CONFIG.bots.playerPreference;
+      if (d < bestScore) { bestScore = d; best = o; }
+    }
+    return best;
+  }
+
+  // Direction (-1 ou 1) du sol le plus proche, 0 si aucun trouvé
+  nearestGroundDir(map, x, y) {
+    for (let step = 40; step <= 600; step += 40) {
+      if (map.groundBelow(x - step, y) !== Infinity) return -1;
+      if (map.groundBelow(x + step, y) !== Infinity) return 1;
+    }
+    return 0;
+  }
+}
