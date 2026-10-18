@@ -823,7 +823,8 @@ button.chip { cursor: pointer; }
     players.forEach((p, i) => {
       Object.assign(p, { x: spots[i][0], z: spots[i][1], y: 0, vx: 0, vz: 0, vy: 0, dashT: 0, cds: {}, guardT: 0, punchT: 0, stun: 0, hitT: 0,
         out: false, outAt: Infinity, ko: 0, sinking: false, respawnT: 0, celebrate: false, gs: 0, finished: 0,
-        heldBy: null, holding: null, holdT: 0, struggle: 0, bigT: 0, fastT: 0, powT: 0, size: 1, sq: 0 });
+        heldBy: null, holding: null, holdT: 0, struggle: 0, bigT: 0, fastT: 0, powT: 0, size: 1, sq: 0, aura: false });
+      p.bubble.material.color.copy(lin(p.color));
       p.face = L.kind === "track" ? Math.PI : Math.atan2(-p.x, -(p.z - L.cz));
       p.mesh.g.visible = true; p.mesh.g.rotation.set(0, 0, 0);
     });
@@ -835,7 +836,7 @@ button.chip { cursor: pointer; }
 
   // ---------- Contrôles : joystick + 4 boutons façon manette PS5 ----------
   const BTN = { t: "△", o: "○", x: "✕", s: "□" };
-  const ACT_NAME = { jump: "Saut", dash: "Fonce", punch: "Poing", guard: "Bouclier", grab: "Attrape", splash: "Peinture" };
+  const ACT_NAME = { jump: "Saut", dash: "Fonce", punch: "Poing", guard: "Bouclier", grab: "Attrape", splash: "Peinture", mash: "Tire !" };
   function pressButton(p, b) {
     if (!live() || !G) return;
     if (state === "practice" && !p.ready) { p.ready = true; SFX.ui(); renderReady(); }
@@ -1327,9 +1328,9 @@ button.chip { cursor: pointer; }
     team: (p) => (p.idx % 2 === 0 ? 0 : 1),
     spots() { return players.map((p) => [(this.team(p) === 0 ? -1 : 1) * 3.5, (p.idx < 2 ? -1 : 1) * 1.8]); },
     start() {
-      this.goals = [0, 0]; this.reset = 0; this.GW = 1.7;
-      this.ball = mk(new THREE.SphereGeometry(0.5, 20, 14), "#ffffff"); gameObjs.add(this.ball);
-      const spot = mk(new THREE.SphereGeometry(0.18, 8, 6), "#241b3a", { ol: 0 }); spot.position.set(0.38, 0.2, 0.15); this.ball.add(spot);
+      this.goals = [0, 0]; this.reset = 0; this.GW = this.goalW || 1.7;
+      if (this.puck) { this.ball = mk(new THREE.CylinderGeometry(0.5, 0.5, 0.25, 20), "#241b3a"); gameObjs.add(this.ball); }
+      else { this.ball = mk(new THREE.SphereGeometry(0.5, 20, 14), "#ffffff"); gameObjs.add(this.ball); const spot = mk(new THREE.SphereGeometry(0.18, 8, 6), "#241b3a", { ol: 0 }); spot.position.set(0.38, 0.2, 0.15); this.ball.add(spot); }
       this.b = { x: 0, z: 0, vx: 0, vz: 0 };
       [-1, 1].forEach((s) => {
         const gx = s * (L.W / 2 + 0.6), col = s < 0 ? "#ff4d5a" : "#3d8bff";
@@ -1342,7 +1343,7 @@ button.chip { cursor: pointer; }
     update(dt) {
       const b = this.b;
       if (this.reset > 0) { this.reset -= dt; if (this.reset <= 0) { Object.assign(b, { x: 0, z: 0, vx: 0, vz: 0 }); resetPlayers(); players.forEach((p) => (p.gs = this.goals[this.team(p)])); } }
-      const f = Math.exp(-0.9 * dt); b.vx *= f; b.vz *= f;
+      const f = Math.exp(-(this.ballFric || 0.9) * dt); b.vx *= f; b.vz *= f;
       b.x += b.vx * dt; b.z += b.vz * dt;
       const hz = L.D / 2 - 0.5, hx = L.W / 2 - 0.5;
       if (Math.abs(b.z) > hz) { b.z = Math.sign(b.z) * hz; b.vz *= -0.8; }
@@ -1361,7 +1362,7 @@ button.chip { cursor: pointer; }
           if (p.dashT > 0) beep(300, 0.08, "square", 0.05);
         }
       }
-      this.ball.position.set(b.x, 0.5, b.z); this.ball.rotation.z -= b.vx * dt * 2; this.ball.rotation.x += b.vz * dt * 2;
+      if (this.puck) this.ball.position.set(b.x, 0.13, b.z); else { this.ball.position.set(b.x, 0.5, b.z); this.ball.rotation.z -= b.vx * dt * 2; this.ball.rotation.x += b.vz * dt * 2; }
     },
     done: () => timeLeft <= 0,
     score(p) { return this.goals[this.team(p)] * 10 - this.goals[1 - this.team(p)]; },
@@ -1386,13 +1387,13 @@ button.chip { cursor: pointer; }
     name: "Course gourmande", short: "Course d'obstacles", theme: "bonbons", layout: "track", buttons: { x: "jump", s: "dash", o: "punch" }, duration: 50,
     rule: "Cours jusqu'à la ligne d'arrivée ! ✕ Saute par-dessus les barrières en guimauve, □ Fonce pour accélérer et ○ Poing pour gêner les autres. Évite les blocs qui glissent !",
     start() {
-      this.finishZ = -62; this.obs = []; this.order = 0;
+      this.finishZ = -62; this.obs = []; this.order = 0; const C = this.colors || ["#ff7ab8", "#ffffff", "#5fd0ff", "#ffd23f"];
       for (let z = -8, k = 0; z > -58; z -= 5.5, k++) {
         if (k % 3 === 0 || k % 3 === 2) {
-          const m = mk(new THREE.BoxGeometry(L.W - 0.2, 0.55, 0.35), k % 2 ? "#ff7ab8" : "#ffffff"); m.position.set(0, 0.28, z); gameObjs.add(m);
+          const m = mk(new THREE.BoxGeometry(L.W - 0.2, 0.55, 0.35), k % 2 ? C[0] : C[1]); m.position.set(0, 0.28, z); gameObjs.add(m);
           this.obs.push({ type: "hurdle", z, m });
         } else {
-          for (let j = 0; j < 2; j++) { const m = mk(new THREE.BoxGeometry(1.8, 1.2, 1), j ? "#5fd0ff" : "#ffd23f"); m.position.set(0, 0.6, z); gameObjs.add(m); this.obs.push({ type: "block", z, m, ph: j * Math.PI + k, x: 0 }); }
+          for (let j = 0; j < 2; j++) { const m = mk(new THREE.BoxGeometry(1.8, 1.2, 1), j ? C[2] : C[3]); m.position.set(0, 0.6, z); gameObjs.add(m); this.obs.push({ type: "block", z, m, ph: j * Math.PI + k, x: 0 }); }
         }
       }
       const arch = new THREE.Group();
@@ -1437,6 +1438,386 @@ button.chip { cursor: pointer; }
     },
   });
 
+  // ---------- Lot 2 : 12 mini-jeux de plus ----------
+  def("moles", {
+    name: "Taupes folles", short: "Tape les taupes", theme: "prairie", duration: 30, buttons: { o: "punch", s: "dash", x: "jump" },
+    rule: "Des taupes sortent des trous : approche-toi et frappe-les avec ○ Poing ! La taupe dorée vaut 3 points. Bouscule les autres pour leur voler la place.",
+    start() {
+      this.holes = []; this.next = 0.6;
+      const pos = [[0, 0]]; for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2 + 0.39; pos.push([Math.cos(a) * 3.9, Math.sin(a) * 3.9]); }
+      for (const [x, z] of pos) {
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(0.62, 24), new THREE.MeshBasicMaterial({ color: lin("#3a2a1e") })); hole.rotation.x = -Math.PI / 2; hole.position.set(x, 0.03, z); gameObjs.add(hole);
+        const rim = mk(new THREE.TorusGeometry(0.66, 0.12, 8, 24), "#8a5a3a", { ol: 0.03 }); rim.rotation.x = Math.PI / 2; rim.position.set(x, 0.06, z); gameObjs.add(rim);
+        const m = new THREE.Group();
+        const body = mk(new THREE.SphereGeometry(0.45, 16, 12), "#8a5a3a", { ol: 0.04 }); body.scale.y = 1.3; body.position.y = 0.3; m.add(body);
+        const nose = mk(new THREE.SphereGeometry(0.1, 8, 6), "#ff8fb0", { ol: 0.02 }); nose.position.set(0, 0.45, 0.42); m.add(nose);
+        [-1, 1].forEach((s) => { const e = mk(new THREE.SphereGeometry(0.06, 8, 6), "#241b3a", { ol: 0 }); e.position.set(s * 0.15, 0.62, 0.36); m.add(e); });
+        m.position.set(x, -1.1, z); gameObjs.add(m);
+        this.holes.push({ x, z, m, body, up: 0, y: -1.1, gold: false });
+      }
+    },
+    update(dt) {
+      this.next -= dt;
+      if (this.next <= 0) {
+        this.next = Math.max(0.3, 0.85 - gameTime * 0.012);
+        const free = this.holes.filter((h) => h.up <= 0 && h.y < -0.8);
+        if (free.length) { const h = pick(free); h.up = rnd(1, 1.6); h.gold = Math.random() < 0.12; h.body.material.color.copy(lin(h.gold ? "#ffc61a" : "#8a5a3a")); }
+      }
+      for (const h of this.holes) { h.up -= dt; const ty = h.up > 0 ? 0 : -1.1; h.y += (ty - h.y) * Math.min(1, dt * 14); h.m.position.y = h.y; }
+    },
+    onPunch(p, fx, fz, range) {
+      let hit = false;
+      for (const h of this.holes) {
+        if (h.up <= 0 || h.y < -0.5) continue;
+        const dx = h.x - p.x, dz = h.z - p.z, d = Math.hypot(dx, dz);
+        if (d > range + 0.3 || (d > 0.5 && (dx * fx + dz * fz) / d < 0.2)) continue;
+        p.gs += h.gold ? 3 : 1; h.up = 0; hit = true;
+        SFX.coin(); burst(h.x, 0.8, h.z, h.gold ? "#ffd23f" : "#c08a52", 8); popup(h.gold ? "+3" : "+1", h.x, 2, h.z, "#ffd23f", 1.2); hitStop(0.04);
+      }
+      return hit;
+    },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} taupes`, chip: (p) => p.gs,
+    botGoal(p) {
+      let best = null, bd = Infinity;
+      for (const h of this.holes) { if (h.up <= 0.15) continue; const d = Math.hypot(h.x - p.x, h.z - p.z) - (h.gold ? 2 : 0); if (d < bd) { bd = d; best = h; } }
+      p.target = best; if (!best) return wander(p, 2);
+      const d = Math.hypot(best.x - p.x, best.z - p.z) || 1; return [best.x - (best.x - p.x) / d * 1.1, best.z - (best.z - p.z) / d * 1.1];
+    },
+    botAct(p) { const h = p.target; if (h && h.up > 0 && Math.hypot(h.x - p.x, h.z - p.z) < 1.9 && Math.random() < 0.8 * p.skill) { p.face = Math.atan2(h.x - p.x, h.z - p.z); return "punch"; } return null; },
+  });
+
+  def("eggs", {
+    name: "Pluie d'œufs", short: "Rattrape les œufs", theme: "plage", duration: 30, buttons: { s: "dash", o: "punch", x: "jump", t: "grab" },
+    rule: "Des œufs tombent du ciel : place-toi sous leur ombre pour les rattraper. L'œuf doré vaut 3, l'œuf pourri violet fait perdre 2 points et t'étourdit !",
+    start() { this.list = []; this.next = 0.5; },
+    update(dt) {
+      this.next -= dt;
+      if (this.next <= 0) {
+        this.next = rnd(0.45, 0.8);
+        const [x, z] = randomSpot(0.8), r = Math.random(), kind = r < 0.1 ? "gold" : r < 0.27 ? "bad" : "egg";
+        const e = mk(new THREE.SphereGeometry(0.32, 16, 12), kind === "gold" ? "#ffc61a" : kind === "bad" ? "#8a4fd8" : "#fff6e0", { ol: 0.04 }); e.scale.y = 1.3; e.position.set(x, 16, z); gameObjs.add(e);
+        const sh = new THREE.Mesh(new THREE.CircleGeometry(0.55, 20), new THREE.MeshBasicMaterial({ color: lin(kind === "bad" ? "#8a4fd8" : "#241b3a"), transparent: true, opacity: 0.25, depthWrite: false }));
+        sh.rotation.x = -Math.PI / 2; sh.position.set(x, 0.04, z); gameObjs.add(sh);
+        this.list.push({ x, z, kind, e, sh, t: 0, T: rnd(1.5, 2.1) });
+      }
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const o = this.list[i]; o.t += dt; const k = Math.min(1, o.t / o.T);
+        o.e.position.y = 16 * (1 - k * k) + 1.6 * k * k; o.e.rotation.z += dt * 3; o.sh.scale.setScalar(0.4 + k * 0.8); o.sh.material.opacity = 0.15 + k * 0.4;
+        if (k < 1) continue;
+        const c = standing().filter((p) => !p.heldBy && p.y < 1.6 && Math.hypot(p.x - o.x, p.z - o.z) < 1.05).sort((a, b) => Math.hypot(a.x - o.x, a.z - o.z) - Math.hypot(b.x - o.x, b.z - o.z))[0];
+        if (c && o.kind === "bad") { c.gs = Math.max(0, c.gs - 2); c.stun = 0.9; popup("BEURK !", c.x, 3, c.z, "#b07cff", 1.3); SFX.fall(); burst(o.x, 1.5, o.z, "#8a4fd8", 10); }
+        else if (c) { const n = o.kind === "gold" ? 3 : 1; c.gs += n; popup(`+${n}`, c.x, 3, c.z, "#ffd23f", 1.2); SFX.coin(); c.sq = 0.5; }
+        else burst(o.x, 0.2, o.z, o.kind === "bad" ? "#8a4fd8" : "#ffd23f", 8);
+        gameObjs.remove(o.e, o.sh); this.list.splice(i, 1);
+      }
+    },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} œufs`, chip: (p) => p.gs,
+    botGoal(p) {
+      let best = null, bs = Infinity;
+      for (const o of this.list) { if (o.kind === "bad") continue; const d = Math.hypot(o.x - p.x, o.z - p.z), tl = o.T - o.t; if (d / 5.5 > tl + 0.1) continue; const s = d - (o.kind === "gold" ? 3 : 0) + tl; if (s < bs) { bs = s; best = o; } }
+      let [tx, tz] = best ? [best.x, best.z] : wander(p, 2);
+      for (const o of this.list) if (o.kind === "bad" && o.T - o.t < 0.6) { const d = Math.hypot(p.x - o.x, p.z - o.z); if (d < 1.4) { tx = p.x + (p.x - o.x) * 2; tz = p.z + (p.z - o.z) * 2; } }
+      return [tx, tz];
+    },
+    botDash: () => false,
+  });
+
+  def("balloons", {
+    name: "Ballons pop", short: "Saute pour éclater les ballons", theme: "bonbons", layout: "field", duration: 30, buttons: { x: "jump", s: "dash", o: "punch" },
+    rule: "Des ballons flottent au-dessus de l'arène : ✕ saute dedans pour les éclater ! Le ballon doré vaut 3. Bouscule les autres pour leur faire rater leur saut.",
+    start() { this.list = []; for (let k = 0; k < 6; k++) this.spawn(true); },
+    spawn(now) {
+      const [x, z] = randomSpot(1.2), gold = Math.random() < 0.12, col = gold ? "#ffc61a" : pick(["#ff4d6a", "#3d8bff", "#2fc46b", "#a46bff", "#ff8a3d"]);
+      const g = new THREE.Group(); const b = mk(new THREE.SphereGeometry(0.5, 16, 12), col, { ol: 0.04 }); b.scale.y = 1.2; g.add(b);
+      const s = mk(new THREE.CylinderGeometry(0.015, 0.015, 1, 4), "#ffffff", { ol: 0 }); s.position.y = -1.1; g.add(s);
+      const y = rnd(3.4, 4); g.position.set(x, now ? y : -2, z); gameObjs.add(g);
+      this.list.push({ g, x, z, y, gold, ph: Math.random() * 6, vx: rnd(-0.5, 0.5), vz: rnd(-0.5, 0.5) });
+    },
+    update(dt, t) {
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const o = this.list[i];
+        o.x += o.vx * dt; o.z += o.vz * dt;
+        if (Math.abs(o.x - L.cx) > L.W / 2 - 1) o.vx *= -1; if (Math.abs(o.z - L.cz) > L.D / 2 - 1) o.vz *= -1;
+        const gy = o.g.position.y + (o.y + Math.sin(t * 2 + o.ph) * 0.2 - o.g.position.y) * Math.min(1, dt * 2);
+        o.g.position.set(o.x, gy, o.z);
+        const p = standing().find((q) => !q.heldBy && Math.hypot(q.x - o.x, q.z - o.z) < 0.95 && Math.abs(q.y + 2.3 * q.size - gy) < 0.75);
+        if (!p) continue;
+        const n = o.gold ? 3 : 1; p.gs += n; SFX.coin(); noise(0.08, 0.15, 3000); burst(o.x, gy, o.z, o.gold ? "#ffd23f" : "#ffffff", 10); popup(`+${n}`, o.x, gy + 1, o.z, "#ffd23f", 1.2);
+        gameObjs.remove(o.g); this.list.splice(i, 1); this.spawn(false);
+      }
+    },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} ballons`, chip: (p) => p.gs,
+    botGoal(p) { let best = null, bd = Infinity; for (const o of this.list) { const d = Math.hypot(o.x - p.x, o.z - p.z) - (o.gold ? 2 : 0); if (d < bd && o.g.position.y > 2.5) { bd = d; best = o; } } p.target = best; return best ? [best.x, best.z] : [0, 0]; },
+    botAct(p) { const o = p.target; return o && p.y <= 0.001 && Math.hypot(o.x - p.x, o.z - p.z) < 0.9 && Math.random() < 0.7 ? "jump" : null; },
+  });
+
+  def("chairs", Object.assign({}, survival, {
+    name: "Chaises musicales", short: "Trouve un coussin à temps", theme: "prairie", buttons: { s: "dash", o: "punch", t: "grab", x: "jump" },
+    rule: "Tournez autour de l'île tant que la musique joue. Quand elle s'arrête, des coussins apparaissent : il y en a un de moins que de joueurs ! Celui qui reste sans coussin est éliminé.",
+    start() { this.phase = "music"; this.t = rnd(3, 5); this.seats = []; this.note = 0; },
+    update(dt) {
+      this.t -= dt;
+      if (this.phase === "music") {
+        this.note -= dt; if (this.note <= 0) { this.note = 0.22; tone(440 * Math.pow(2, pick([0, 3, 5, 7, 10, 12]) / 12), 0.2, "square", 0.03); }
+        if (this.t <= 0) {
+          this.phase = "seat"; this.t = 3.2; banner("STOP !", 700); SFX.go();
+          const n = alive().length - 1, pts = [];
+          for (let k = 0; k < 60 && pts.length < n; k++) { const [x, z] = randomSpot(1.2); if (pts.every(([a, b]) => Math.hypot(a - x, b - z) > 2.2)) pts.push([x, z]); }
+          this.seats = pts.map(([x, z]) => { const m = mk(new THREE.CylinderGeometry(0.6, 0.65, 0.3, 20), "#ff4d6a", { ol: 0.04 }); m.position.set(x, 0.15, z); gameObjs.add(m); burst(x, 0.5, z, "#ffffff", 5); return { x, z, m, owner: null }; });
+        }
+      } else {
+        for (const s of this.seats) {
+          if (s.owner && (!active(s.owner) || s.owner.heldBy || Math.hypot(s.owner.x - s.x, s.owner.z - s.z) > 0.9)) s.owner = null;
+          if (!s.owner) { const c = standing().find((p) => !p.heldBy && p.y < 0.6 && Math.hypot(p.x - s.x, p.z - s.z) < 0.7 && !this.seats.some((o) => o.owner === p)); if (c) { s.owner = c; SFX.ui(); } }
+          s.m.material.color.copy(lin(s.owner ? s.owner.color : "#ff4d6a"));
+        }
+        if (this.t <= 0) {
+          for (const p of alive()) if (!this.seats.some((s) => s.owner === p)) { knockOut(p, p.x + 0.01, p.z); popup("ÉLIMINÉ", p.x, 3, p.z, "#ff5a73", 1.3); }
+          for (const s of this.seats) gameObjs.remove(s.m);
+          this.seats = []; this.phase = "music"; this.t = rnd(3, 6);
+        }
+      }
+    },
+    done: () => alive().length <= 1,
+    botGoal(p) {
+      if (this.phase === "seat") {
+        let best = null, bd = Infinity;
+        for (const s of this.seats) { if (s.owner && s.owner !== p) continue; const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; best = s; } }
+        if (best) return [best.x, best.z];
+        const [f] = nearestFoe(p, (q) => this.seats.some((s) => s.owner === q)); return f ? [f.x, f.z] : [p.x, p.z];
+      }
+      const a = Math.atan2(p.z, p.x) + 0.6; return [Math.cos(a) * 3, Math.sin(a) * 3];
+    },
+    botDash() { return this.phase === "seat" && Math.random() < 0.3; },
+  }));
+
+  def("rollers", Object.assign({}, survival, {
+    name: "Boules de neige", short: "Saute par-dessus les boules", theme: "banquise", duration: 40, buttons: { x: "jump", s: "dash", o: "punch" },
+    rule: "D'énormes boules de neige traversent l'île. ✕ Saute par-dessus ou écarte-toi ! Si une boule te touche, tu es projeté. Le dernier debout gagne, ou tous ceux encore là après 40 secondes.",
+    start() { this.list = []; this.next = 1.5; },
+    update(dt) {
+      this.next -= dt;
+      if (this.next <= 0) {
+        this.next = Math.max(0.8, 2.3 - gameTime * 0.04);
+        const a = Math.random() * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a), off = rnd(-3, 3), r = rnd(0.7, 1.05);
+        const x = -dx * (L.R + 3) - dz * off, z = -dz * (L.R + 3) + dx * off, sp = rnd(5, 7.5) + gameTime * 0.05;
+        const m = mk(new THREE.IcosahedronGeometry(r, 1), "#ffffff", { ol: 0.06 }); m.position.set(x, r, z); gameObjs.add(m);
+        this.list.push({ x, z, dx, dz, sp, r, m });
+      }
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const b = this.list[i]; b.x += b.dx * b.sp * dt; b.z += b.dz * b.sp * dt;
+        b.m.position.set(b.x, b.r, b.z); b.m.rotation.x += b.dz * b.sp * dt / b.r; b.m.rotation.z -= b.dx * b.sp * dt / b.r;
+        if (Math.hypot(b.x, b.z) > L.R + 4 && b.x * b.dx + b.z * b.dz > 0) { gameObjs.remove(b.m); this.list.splice(i, 1); continue; }
+        for (const p of standing()) {
+          if (p.heldBy || p.hitT > 0 || p.y > b.r * 1.3) continue;
+          if (Math.hypot(p.x - b.x, p.z - b.z) < b.r + 0.5 * p.size) {
+            const side = (p.x - b.x) * -b.dz + (p.z - b.z) * b.dx >= 0 ? 1 : -1;
+            p.vx = b.dx * 9 - b.dz * side * 5; p.vz = b.dz * 9 + b.dx * side * 5; p.vy = 6; p.y = 0.01; p.hitT = 0.8;
+            SFX.punch(); shake = 0.3; burst(p.x, 1, p.z, "#ffffff", 8); popup("PAF !", p.x, 3, p.z, "#9be7ff", 1.2);
+          }
+        }
+      }
+    },
+    done: () => timeLeft <= 0 || (standing().length <= 1 && !players.some((p) => !p.out && p.sinking)),
+    botGoal(p) {
+      let [tx, tz] = wander(p, 2.4);
+      for (const b of this.list) {
+        const rx = p.x - b.x, rz = p.z - b.z, along = rx * b.dx + rz * b.dz, perp = -rx * b.dz + rz * b.dx;
+        if (along > 0 && along < 5 && Math.abs(perp) < b.r + 1.4) { const s = perp >= 0 ? 1 : -1; tx = p.x - b.dz * s * 3; tz = p.z + b.dx * s * 3; }
+      }
+      return [tx, tz];
+    },
+    botAct(p) {
+      if (p.y > 0.001) return null;
+      for (const b of this.list) {
+        const rx = p.x - b.x, rz = p.z - b.z, along = rx * b.dx + rz * b.dz, perp = -rx * b.dz + rz * b.dx, tt = (along - b.r) / b.sp;
+        if (along > 0 && Math.abs(perp) < b.r + 0.6 && tt < 0.22 && tt > -0.05 && Math.random() < 0.85 * p.skill) return "jump";
+      }
+      return null;
+    },
+  }));
+
+  def("tug", {
+    name: "Tir à la corde", short: "Martèle les boutons en équipe", theme: "espace", layout: "field", teams: true, duration: 25, lockMove: true,
+    buttons: { x: "mash", o: "mash", s: "mash", t: "mash" },
+    rule: "Anneaux rouge et vert contre bleu et jaune. Martèle n'importe quel bouton le plus vite possible pour tirer la corde ! L'équipe qui fait passer le drapeau jaune au-delà de sa ligne gagne.",
+    team: (p) => (p.idx % 2 === 0 ? 0 : 1),
+    spots() { const n = [0, 0]; return players.map((p) => { const t = this.team(p), k = n[t]++; return [(t === 0 ? -1 : 1) * (1.6 + k * 1.7), 0]; }); },
+    start() {
+      this.r = 0; this.win = -1;
+      this.rope = mk(new THREE.CylinderGeometry(0.09, 0.09, 12, 8), "#c9a26a", { ol: 0.02 }); this.rope.rotation.z = Math.PI / 2; this.rope.position.y = 1.1; gameObjs.add(this.rope);
+      this.flag = mk(new THREE.BoxGeometry(0.1, 0.8, 0.6), "#ffd23f", { ol: 0.03 }); gameObjs.add(this.flag);
+      [-1, 1].forEach((s) => { const line = new THREE.Mesh(new THREE.PlaneGeometry(0.2, L.D - 1), new THREE.MeshBasicMaterial({ color: lin(s < 0 ? "#ff4d5a" : "#3d8bff") })); line.rotation.x = -Math.PI / 2; line.position.set(s * 3, 0.03, 0); gameObjs.add(line); });
+      const mid = new THREE.Mesh(new THREE.PlaneGeometry(0.15, L.D - 1), new THREE.MeshBasicMaterial({ color: 0xffffff })); mid.rotation.x = -Math.PI / 2; mid.position.y = 0.03; gameObjs.add(mid);
+      this.n = [0, 0]; players.forEach((p) => this.n[this.team(p)]++);
+      this.base = this.spots();
+    },
+    custom: { mash(p) { if (this.win >= 0 || state !== "play") return; const t = this.team(p), w = 0.085 * (2 / Math.max(1, this.n[t])); this.r += t === 0 ? -w : w; p.punchT = 0.15; p.sq = 0.3; if (Math.random() < 0.3) tone(300 + Math.random() * 200, 0.05, "square", 0.02); } },
+    update() {
+      players.forEach((p, i) => { p.x = this.base[i][0] + this.r; p.z = 0; p.vx = p.vz = 0; p.face = this.team(p) === 0 ? Math.PI / 2 : -Math.PI / 2; });
+      this.rope.position.x = this.r; this.flag.position.set(this.r, 1.6, 0);
+      if (Math.abs(this.r) > 3 && this.win < 0) { this.win = this.r < 0 ? 0 : 1; burst(this.r, 1.5, 0, this.win ? "#3d8bff" : "#ff4d5a", 20); SFX.win(); }
+    },
+    winner() { return this.win >= 0 ? this.win : this.r < -0.05 ? 0 : this.r > 0.05 ? 1 : -1; },
+    done() { return this.win >= 0 || timeLeft <= 0; },
+    score(p) { return this.winner() === this.team(p) ? 1 : 0; },
+    value(p) { const w = this.winner(); return w < 0 ? "Égalité" : w === this.team(p) ? "Victoire" : "Défaite"; },
+    chip(p) { const lead = this.r < 0 ? 0 : this.r > 0 ? 1 : -1; return lead === this.team(p) ? `${Math.round(Math.abs(this.r) / 3 * 100)} %` : "0 %"; },
+    botGoal: (p) => [p.x, p.z],
+    botAct(p) { return Math.random() < 0.75 * p.skill ? "mash" : null; },
+  });
+
+  def("crown", {
+    name: "Voleur de couronne", short: "Garde la couronne", theme: "bonbons", respawn: true, items: true, duration: 40, buttons: { s: "dash", o: "punch", t: "grab", x: "jump" },
+    rule: "Ramasse la couronne et garde-la le plus longtemps possible : chaque seconde rapporte un point. Un coup de ○ Poing, de □ Fonce ou un lancer fait tomber la couronne de la tête de celui qui la porte !",
+    start() {
+      this.holder = null; this.x = 0; this.z = 0; this.y = 0.6; this.vx = 0; this.vz = 0; this.vy = 0; this.lock = null; this.lockT = 0;
+      const g = new THREE.Group(), gold = toon("#ffc61a", { emissive: lin("#5a3a00") });
+      const ring = mk(new THREE.CylinderGeometry(0.42, 0.38, 0.28, 18, 1, true), "#ffc61a", { mat: gold, ol: 0.03 }); ring.material.side = THREE.DoubleSide; g.add(ring);
+      for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2, sp = mk(new THREE.ConeGeometry(0.09, 0.26, 6), "#ffc61a", { mat: gold, ol: 0.02 }); sp.position.set(Math.sin(a) * 0.4, 0.25, Math.cos(a) * 0.4); g.add(sp); }
+      g.position.set(0, 0.6, 0); gameObjs.add(g); this.mesh = g;
+    },
+    drop(p) { this.holder = null; this.lock = p; this.lockT = 1; const a = Math.random() * Math.PI * 2; this.x = p.x; this.z = p.z; this.y = p.y + 3; this.vx = Math.cos(a) * 3.5; this.vz = Math.sin(a) * 3.5; this.vy = 6; popup("PERDUE !", p.x, 3.4, p.z, "#ffd23f", 1.2); SFX.toss(); },
+    update(dt, t) {
+      const h = this.holder;
+      if (h) {
+        if (!active(h) || h.sinking) { this.holder = null; this.x = 0; this.z = 0; this.y = 6; this.vx = this.vz = this.vy = 0; }
+        else { h.gs += dt; this.mesh.position.set(h.x, h.y + 3.1 * h.size, h.z); this.mesh.rotation.y += dt * 2; return; }
+      }
+      this.lockT -= dt;
+      this.vy -= GRAV * dt; this.x += this.vx * dt; this.z += this.vz * dt; this.y += this.vy * dt;
+      if (this.y < 0.6 && this.y > -0.5 && layoutOnFloor(this.x, this.z)) { this.y = 0.6; this.vy = 0; this.vx *= 0.9; this.vz *= 0.9; }
+      if (this.y < -6) { this.x = 0; this.z = 0; this.y = 6; this.vx = this.vz = this.vy = 0; }
+      this.mesh.position.set(this.x, this.y + Math.sin(t * 3) * 0.1, this.z); this.mesh.rotation.y += dt;
+      const c = standing().find((p) => !p.heldBy && (p !== this.lock || this.lockT <= 0) && Math.abs(p.y + 1 - this.y) < 1.6 && Math.hypot(p.x - this.x, p.z - this.z) < 1);
+      if (c) { this.holder = c; SFX.item(); popup("COURONNE !", c.x, 3.4, c.z, "#ffd23f", 1.3); }
+    },
+    onHit(v) { if (v === this.holder) this.drop(v); },
+    done: () => timeLeft <= 0,
+    score: (p) => Math.floor(p.gs * 10), value: (p) => `${p.gs.toFixed(1)} s`, chip(p) { return p === this.holder ? "ROI" : p.gs.toFixed(0); },
+    botGoal(p) { if (p === this.holder) { const [f, d] = nearestFoe(p); return f && d < 4.5 ? flee(p, f) : wander(p, 2.4); } const h = this.holder; return h ? [h.x, h.z] : [this.x, this.z]; },
+    botDash(p) { const h = this.holder; return h && h !== p && Math.hypot(h.x - p.x, h.z - p.z) < 2.6 && Math.random() < 0.5; },
+  });
+
+  def("fish", {
+    name: "Pêche sportive", short: "Attrape les poissons volants", theme: "plage", respawn: true, duration: 35, buttons: { s: "dash", o: "punch", x: "jump", t: "grab" },
+    rule: "Des poissons sautent de l'eau et atterrissent au bord de l'île. Passe dessus pour les attraper avant qu'ils ne replongent ! Le poisson doré vaut 3. Tomber à l'eau fait perdre 2 poissons.",
+    start() { this.list = []; this.next = 0.8; },
+    update(dt) {
+      this.next -= dt;
+      if (this.next <= 0) {
+        this.next = rnd(0.6, 1.1);
+        const a = Math.random() * Math.PI * 2, gold = Math.random() < 0.12, land = L.R - rnd(0.5, 1.8);
+        const g = new THREE.Group();
+        const body = mk(new THREE.SphereGeometry(0.3, 14, 10), gold ? "#ffc61a" : pick(["#ff8a3d", "#3d8bff", "#ff5fa8"]), { ol: 0.03 }); body.scale.set(0.6, 0.8, 1.5); g.add(body);
+        const tail = mk(new THREE.ConeGeometry(0.22, 0.35, 4), gold ? "#ffc61a" : "#ffd23f", { ol: 0.02 }); tail.rotation.x = -Math.PI / 2; tail.position.z = -0.55; g.add(tail);
+        gameObjs.add(g); this.list.push({ g, a, gold, land, t: 0, phase: "fly", x: 0, z: 0 });
+      }
+      for (let i = this.list.length - 1; i >= 0; i--) {
+        const f = this.list[i]; f.t += dt;
+        if (f.phase === "fly") {
+          const k = Math.min(1, f.t / 1.1), r = L.R + 3 + (f.land - L.R - 3) * k, y = -3 + 3.3 * k + Math.sin(k * Math.PI) * 4;
+          f.x = Math.cos(f.a) * r; f.z = Math.sin(f.a) * r; f.g.position.set(f.x, y, f.z); f.g.rotation.y = -f.a - Math.PI / 2; f.g.rotation.x = (k - 0.5) * 1.5;
+          if (k >= 1) { f.phase = "flop"; f.t = 0; burst(f.x, 0.3, f.z, "#9be7ff", 5); }
+          continue;
+        }
+        const r = f.land + f.t * 0.45; f.x = Math.cos(f.a) * r; f.z = Math.sin(f.a) * r;
+        f.g.position.set(f.x, 0.3 + Math.abs(Math.sin(f.t * 9)) * 0.35, f.z); f.g.rotation.x = 0; f.g.rotation.z = Math.sin(f.t * 12) * 0.6;
+        if (r > L.R + 0.3) { f.g.position.y -= (r - L.R - 0.3) * 6; if (r > L.R + 1.2) { gameObjs.remove(f.g); this.list.splice(i, 1); } continue; }
+        const c = standing().find((p) => !p.heldBy && p.y < 1.2 && Math.hypot(p.x - f.x, p.z - f.z) < 0.95);
+        if (c) { const n = f.gold ? 3 : 1; c.gs += n; SFX.coin(); popup(`+${n}`, f.x, 2, f.z, "#ffd23f", 1.2); burst(f.x, 0.5, f.z, "#9be7ff", 6); gameObjs.remove(f.g); this.list.splice(i, 1); }
+      }
+    },
+    onFall(p) { p.gs = Math.max(0, p.gs - 2); },
+    done: () => timeLeft <= 0,
+    score: (p) => p.gs, value: (p) => `${p.gs} poissons`, chip: (p) => p.gs,
+    botGoal(p) {
+      let best = null, bd = Infinity;
+      for (const f of this.list) { const fx = f.phase === "flop" ? f.x : Math.cos(f.a) * f.land, fz = f.phase === "flop" ? f.z : Math.sin(f.a) * f.land; const d = Math.hypot(fx - p.x, fz - p.z) - (f.gold ? 2 : 0); if (d < bd) { bd = d; best = [fx, fz]; } }
+      if (!best) return wander(p, 2);
+      const r = Math.hypot(best[0], best[1]) || 1, k = Math.min(1, (L.R - 0.9) / r); return [best[0] * k, best[1] * k];
+    },
+    botDash: () => false,
+  });
+
+  def("statues", {
+    name: "1, 2, 3, Robot !", short: "Avance quand il ne regarde pas", theme: "prairie", layout: "track", layoutOpts: { D: 50, cz: -21 }, duration: 60, buttons: { s: "dash", o: "punch", x: "jump" },
+    rule: "Avance vers le gardien géant quand la lumière est verte. Quand elle passe au rouge, ne bouge plus ! Celui qui bouge repart au départ. Un ○ Poing au mauvais moment peut faire bouger un voisin…",
+    start() {
+      this.finishZ = -40; this.order = 0; this.grace = 0;
+      this.guard = makeChar(Math.floor(Math.random() * CHARS.length), gameObjs); this.guard.g.scale.setScalar(2.6); this.guard.g.position.set(0, 0, -44.5); this.guard.g.rotation.y = Math.PI;
+      this.lamp = mk(new THREE.SphereGeometry(0.8, 18, 12), "#2fc46b", { emissive: "#2fc46b" }); this.lamp.position.set(2.6, 4, -41); gameObjs.add(this.lamp);
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(L.W, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff })); line.rotation.x = -Math.PI / 2; line.position.set(0, 0.03, this.finishZ); gameObjs.add(line);
+      this.setPhase("green"); this.t = rnd(2.5, 4);
+      setCameraFrame(0, L.W / 2 + 0.8, 7, true);
+    },
+    setPhase(ph) { this.phase = ph; const col = lin(ph === "green" ? "#2fc46b" : ph === "warn" ? "#ffc21a" : "#ff3b3b"); this.lamp.material.color.copy(col); this.lamp.material.emissive.copy(col); },
+    update(dt) {
+      this.t -= dt; this.guard.mixer.update(dt);
+      const tr = this.phase === "green" ? Math.PI : 0; this.guard.g.rotation.y += (tr - this.guard.g.rotation.y) * Math.min(1, dt * 10);
+      anim(this.guard, this.phase === "green" ? "Dance" : "Idle");
+      if (this.phase === "green" && this.t <= 0) { this.setPhase("warn"); this.t = 0.45; tone(500, 0.4, "square", 0.04, 300); }
+      else if (this.phase === "warn" && this.t <= 0) { this.setPhase("red"); this.t = rnd(1.6, 2.6); this.grace = 0.3; banner("STOP !", 600); SFX.go(); }
+      else if (this.phase === "red") {
+        this.grace -= dt;
+        if (this.grace <= 0) for (const p of standing()) {
+          if (p.finished || p.heldBy || (Math.hypot(p.vx, p.vz) <= 1.6 && p.y <= 0.05)) continue;
+          popup("BOUGÉ !", p.x, 3, p.z, "#ff5a73", 1.4); SFX.fall(); burst(p.x, 1, p.z, "#ff5a73", 8);
+          p.x = rnd(-2.5, 2.5); p.z = 1.5; p.vx = p.vz = p.vy = 0; p.y = 0; p.stun = 0.6;
+        }
+        if (this.t <= 0) { this.setPhase("green"); this.t = rnd(1.2, 3.5); toast("Feu vert !"); }
+      }
+      for (const p of standing()) if (!p.finished && p.z < this.finishZ) { p.finished = gameTime; this.order++; p.celebrate = true; SFX.win(); burst(p.x, 1, p.z, p.color, 14); toast(`${p.name} arrive ${this.order === 1 ? "premier" : this.order + "e"} !`); }
+      const zs = players.filter((p) => !p.out).map((p) => p.z), lo = Math.min(...zs), hi = Math.max(...zs);
+      setCameraFrame((lo + hi) / 2 - 1.5, L.W / 2 + 0.8, clamp((hi - lo) / 2 + 5, 7, 14));
+    },
+    done() { return timeLeft <= 0 || players.every((p) => p.finished || p.out); },
+    score: (p) => (p.finished ? 1000 - p.finished : -p.z),
+    value: (p) => (p.finished ? `${p.finished.toFixed(1)} s` : `${clamp(Math.round(-p.z / 40 * 100), 0, 99)} %`),
+    chip: (p) => (p.finished ? "ARRIVÉ" : `${clamp(Math.round(-p.z / 40 * 100), 0, 99)} %`),
+    botInput(p) {
+      if (p.finished) return [0, 0, false];
+      if (this.phase === "green") return [clamp(-p.x * 0.3, -0.3, 0.3), -1, false];
+      if (this.phase === "warn" && p.skill > 1.05 && Math.random() < 0.5) return [0, -1, false];
+      return [0, 0, false];
+    },
+  });
+
+  def("zombies", {
+    name: "Invasion zombie", short: "Fuis les zombies", theme: "volcan", respawn: true, duration: 35, buttons: { s: "dash", x: "jump", t: "guard", o: "punch" },
+    rule: "Un robot zombie veut contaminer tout le monde : s'il te touche, tu deviens zombie à ton tour ! Chaque seconde passée sans être zombie rapporte un point. △ Bouclier te protège un instant.",
+    start() { this.z0 = pick(players); this.zs = new Set([this.z0]); this.mark(); },
+    onBegin() { this.zs = new Set([this.z0]); this.z0.stun = 2; this.mark(); },
+    mark() { for (const p of players) { const z = this.zs.has(p); p.aura = z; p.bubble.material.color.copy(lin(z ? "#7dff5a" : p.color)); } },
+    update(dt) { for (const p of players) if (!this.zs.has(p) && active(p) && !p.sinking) p.gs += dt; },
+    onTouch(a, b) {
+      const zz = this.zs.has(a) && !this.zs.has(b) ? a : this.zs.has(b) && !this.zs.has(a) ? b : null; if (!zz) return;
+      const h = zz === a ? b : a; if (h.guardT > 0) return;
+      this.zs.add(h); h.stun = 1.4; this.mark(); SFX.fall(); popup("ZOMBIE !", h.x, 3, h.z, "#7dff5a", 1.4); burst(h.x, 1.2, h.z, "#7dff5a", 12);
+    },
+    done() { return timeLeft <= 0 || players.every((p) => this.zs.has(p)); },
+    score: (p) => Math.floor(p.gs * 10), value: (p) => `${p.gs.toFixed(1)} s`, chip(p) { return this.zs.has(p) ? "ZOMBIE" : p.gs.toFixed(0); },
+    botGoal(p) {
+      if (this.zs.has(p)) { const [f] = nearestFoe(p, (q) => !this.zs.has(q)); return f ? [f.x, f.z] : [0, 0]; }
+      const [f, d] = nearestFoe(p, (q) => this.zs.has(q)); return f && d < 5 ? flee(p, f) : wander(p, 2.2);
+    },
+    botDash(p) { if (!this.zs.has(p)) return false; const [f, d] = nearestFoe(p, (q) => !this.zs.has(q)); return f && d < 2.6 && Math.random() < 0.5; },
+  });
+
+  // Variantes construites sur des jeux existants
+  const variant = (base, id, o) => { const g = Object.assign({}, GAMES[base], o); delete g.id; def(id, g); };
+  variant("foot", "hockey", {
+    name: "Hockey glacé", short: "Hockey 2 contre 2 sur la glace", theme: "banquise", puck: true, ballFric: 0.25, goalW: 1.4,
+    rule: "Anneaux rouge et vert contre bleu et jaune, sur la glace ! Le palet glisse longtemps : □ Fonce pour un tir puissant, ○ Poing pour bousculer un défenseur. Marque à droite pour les rouge et vert, à gauche pour les bleu et jaune.",
+  });
+  variant("race", "sled", {
+    name: "Glissade express", short: "Course d'obstacles sur la glace", theme: "banquise", colors: ["#9be7ff", "#ffffff", "#3d8bff", "#ff5d6c"],
+    rule: "Course sur la glace : ça glisse ! ✕ Saute par-dessus les barrières de glace, □ Fonce pour accélérer et évite les blocs qui glissent. Le premier arrivé gagne.",
+  });
+
   const ORDER = Object.keys(GAMES);
 
   // ---------- Actions des boutons ----------
@@ -1469,6 +1850,7 @@ button.chip { cursor: pointer; }
         if (q.holding) release(q);
         if (state === "play" && G.onHit) G.onHit(q, p);
       }
+      if (state === "play" && G.onPunch && G.onPunch(p, fx, fz, range)) hit = true;
       if (!hit) SFX.whiff();
     } else if (a === "guard") {
       p.guardT = 1.1; p.cds.guard = 3; SFX.block();
@@ -1609,6 +1991,7 @@ button.chip { cursor: pointer; }
           p.inX = kx || p.padX || p.touchX || 0; p.inZ = kz || p.padZ || p.touchZ || 0;
           const m = Math.hypot(p.inX, p.inZ); if (m > 1) { p.inX /= m; p.inZ /= m; }
         } else if (!p.sinking) botThink(p, dt);
+        if (G.lockMove) { p.inX = 0; p.inZ = 0; }
       } else { p.inX = p.inZ = 0; p.acts.clear(); }
       for (const k in p.cds) p.cds[k] = Math.max(0, p.cds[k] - dt);
       p.dashT = Math.max(0, p.dashT - dt); p.guardT = Math.max(0, p.guardT - dt);
@@ -1619,7 +2002,7 @@ button.chip { cursor: pointer; }
         const ctl = (grounded ? 1 : 0.55) * (p.guardT > 0 ? 0.35 : 1) * (p.fastT > 0 ? 1.4 : 1) * (p.holding ? 0.8 : 1);
         p.vx += p.inX * ACC * ctl * dt; p.vz += p.inZ * ACC * ctl * dt;
         const fr = Math.exp(-(p.dashT > 0 ? 1.5 : grounded ? fric : 1.2) * dt); p.vx *= fr; p.vz *= fr;
-        const maxv = MAXV * (p.fastT > 0 ? 1.45 : 1) * (p.holding ? 0.75 : 1);
+        const maxv = MAXV * (p.fastT > 0 ? 1.45 : 1) * (p.holding ? 0.75 : 1) * (p.aura ? 0.88 : 1);
         const sp = Math.hypot(p.vx, p.vz); if (p.dashT <= 0 && p.hitT <= 0 && sp > maxv) { p.vx *= maxv / sp; p.vz *= maxv / sp; }
       }
       p.acts.clear();
@@ -1696,7 +2079,7 @@ button.chip { cursor: pointer; }
       p.mesh.actions.Running.timeScale = p.fastT > 0 ? 1.6 : 1;
       p.mesh.mixer.update(dt);
       if (p.sinking) g.rotation.x += dt * 3; else if (!p.ko) g.rotation.x = 0;
-      p.bubble.visible = p.guardT > 0; if (p.guardT > 0) p.bubble.scale.setScalar(1 + Math.sin(t * 20) * 0.04);
+      p.bubble.visible = p.guardT > 0 || !!p.aura; if (p.guardT > 0) p.bubble.scale.setScalar(1 + Math.sin(t * 20) * 0.04);
       p.ring.visible = g.visible && !p.sinking && !p.heldBy && state !== "menu";
       p.ring.position.set(p.x, 0.04, p.z); p.ring.scale.setScalar(s / (1 + Math.max(0, p.y) * 0.25));
       if (dt > 0 && grounded && (sp > 4.8 || p.dashT > 0)) { p.dustT -= dt; if (p.dustT <= 0) { p.dustT = p.dashT > 0 ? 0.03 : 0.09; dust(p.x - Math.sin(p.face) * 0.4, p.z - Math.cos(p.face) * 0.4, p.fastT > 0 ? "#9be7ff" : p.dashT > 0 ? CHARS[p.ci].main : "#ffffff", 1, 0.5); } }
@@ -1721,7 +2104,7 @@ button.chip { cursor: pointer; }
   function renderHud(force) {
     const now = performance.now(); if (!force && now - lastHud < 120) return; lastHud = now;
     const timer = G.duration && (state === "play" || state === "ending") ? `<span class="sc timer">${Math.ceil(timeLeft)} s</span>` : "";
-    $("hud").innerHTML = timer + players.map((p) => { const c = G.chip(p); return `<span class="sc${p.out || p.ko ? " out" : ""}${typeof c === "string" && /^[A-Z]{4}/.test(c) ? " hot" : ""}"><i style="background:${p.color}"></i>${c}</span>`; }).join("");
+    $("hud").innerHTML = timer + players.map((p) => { const c = G.chip(p); return `<span class="sc${p.out || p.ko ? " out" : ""}${typeof c === "string" && /^[A-ZÀ-Ü]{3}/.test(c) ? " hot" : ""}"><i style="background:${p.color}"></i>${c}</span>`; }).join("");
   }
   let toastT;
   function toast(s) { const el = $("toast"); el.textContent = s; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (el.hidden = true), 1600); }
@@ -1834,7 +2217,7 @@ button.chip { cursor: pointer; }
     $("introMeta").textContent = ["t", "o", "x", "s"].filter((b) => G.buttons[b]).map((b) => `${BTN[b]} ${ACT_NAME[G.buttons[b]]}`).join(" · ") + (G.duration ? ` · ${G.duration} s` : "") + (G.teams ? " · En équipes" : "") + (G.items ? " · Boîtes ? à bonus" : "");
     show("intro");
     await new Promise((res) => { practiceDone = res; $("introGo").onclick = () => { practiceDone = null; res(); }; renderReady(); });
-    resetPlayers(); players.forEach((p) => { p.ready = false; });
+    resetPlayers(); players.forEach((p) => { p.ready = false; }); if (G.onBegin) G.onBegin();
     show(null); state = "count"; renderHud(true);
     for (const n of ["3", "2", "1"]) { SFX.count(); await banner(n, 550); }
     SFX.go(); gameTime = 0;
