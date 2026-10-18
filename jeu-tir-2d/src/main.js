@@ -7,6 +7,7 @@ import { GameMap } from './map.js';
 import { Fighter } from './player.js';
 import { Input } from './input.js';
 import { drawTouchControls } from './hud.js';
+import { Particle } from './bullet.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -20,6 +21,24 @@ const map = new GameMap();
 const player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color });
 player.placeAt(map.spawns[0].x, map.spawns[0].y);
 input.uiMode = false;
+
+// L'état partagé de la partie, transmis aux personnages et aux balles
+const game = {
+  map,
+  fighters: [player],
+  bullets: [],
+  particles: [],
+  // Une balle touche quelqu'un
+  onBulletHit(target, bullet) {
+    game.sparks(bullet.x, bullet.y, target.color, 6);
+  },
+  // Petites étincelles
+  sparks(x, y, color, n) {
+    for (let i = 0; i < n; i++) game.particles.push(new Particle(x, y, color));
+  },
+  // Événements des personnages (tir, rechargement…) : sons plus tard
+  onFighterEvent(fighter, name) {},
+};
 
 // ---------------------------------------------------------------------
 // Adaptation à la taille de l'écran (et netteté sur écrans haute densité)
@@ -67,7 +86,11 @@ function worldToScreen(x, y) {
 function update(dt) {
   const p = worldToScreen(player.cx, player.cy);
   const cmd = input.getCommand(p.x, p.y);
-  player.update(cmd, dt, map);
+  player.update(cmd, dt, game);
+  for (const b of game.bullets) b.update(dt, game);
+  game.bullets = game.bullets.filter((b) => !b.dead);
+  for (const pa of game.particles) pa.update(dt);
+  game.particles = game.particles.filter((pa) => pa.life > 0);
   if (player.y > map.killY) player.placeAt(map.spawns[0].x, map.spawns[0].y);
   updateCamera(dt);
 }
@@ -87,6 +110,8 @@ function render() {
   ctx.translate(-cam.x, -cam.y);
   map.draw(ctx, cam);
   player.draw(ctx);
+  for (const b of game.bullets) b.draw(ctx);
+  for (const pa of game.particles) pa.draw(ctx);
   ctx.restore();
 
   drawTouchControls(ctx, input);

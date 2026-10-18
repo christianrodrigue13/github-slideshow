@@ -5,6 +5,8 @@
 // =====================================================================
 
 import { CONFIG } from './config.js';
+import { Weapon } from './weapon.js';
+import { Bullet } from './bullet.js';
 
 let nextId = 1;
 
@@ -29,7 +31,18 @@ export class Fighter {
     this.jetting = false;        // en train de voler (pour l'affichage/son)
     this.aimAngle = 0;
     this.facing = 1;             // 1 = droite, -1 = gauche
+
+    // Armes : une de chaque type défini dans config.js
+    this.weapons = CONFIG.weapons.map((def) => new Weapon(def));
+    this.weaponIndex = 0;
+    this.muzzleFlash = 0;        // durée restante de l'éclair au bout du canon
   }
+
+  get weapon() { return this.weapons[this.weaponIndex]; }
+
+  // Point d'où partent les balles (l'épaule)
+  get shoulderX() { return this.cx; }
+  get shoulderY() { return this.y + 22; }
 
   // Centre du personnage
   get cx() { return this.x + this.w / 2; }
@@ -42,9 +55,11 @@ export class Fighter {
     this.vx = 0; this.vy = 0;
   }
 
-  // Une mise à jour (1/60 s) à partir d'une commande
-  update(cmd, dt, map) {
+  // Une mise à jour (1/60 s) à partir d'une commande.
+  // game fournit : map, bullets, et onFighterEvent(fighter, nom) pour les sons.
+  update(cmd, dt, game) {
     if (!this.alive) return;
+    const map = game.map;
     const F = CONFIG.fighter;
     const J = CONFIG.jetpack;
 
@@ -94,6 +109,41 @@ export class Fighter {
     } else {
       this.regenTimer = 0;
     }
+
+    // --- Armes ---
+    this.updateWeapons(cmd, dt, game);
+  }
+
+  updateWeapons(cmd, dt, game) {
+    if (this.muzzleFlash > 0) this.muzzleFlash -= dt;
+    for (const w of this.weapons) w.update(dt);
+
+    if (cmd.switchWeapon) {
+      this.weapon.cancelReload();            // changer d'arme annule le rechargement
+      this.weaponIndex = (this.weaponIndex + 1) % this.weapons.length;
+      game.onFighterEvent(this, 'switch');
+    }
+    if (cmd.reload && this.weapon.startReload()) game.onFighterEvent(this, 'reload');
+
+    if (cmd.fire) {
+      const result = this.weapon.tryFire();
+      if (result === 'fired') this.fire(game);
+      else if (result === 'reload') game.onFighterEvent(this, 'reload');
+    }
+  }
+
+  // Fait partir un tir (un ou plusieurs plombs) + recul
+  fire(game) {
+    const def = this.weapon.def;
+    for (let i = 0; i < def.pellets; i++) {
+      const angle = this.aimAngle + (Math.random() - 0.5) * 2 * def.spread;
+      game.bullets.push(new Bullet(this.shoulderX, this.shoulderY, angle, def, this));
+    }
+    // Recul : petite poussée dans le sens opposé au tir
+    this.vx -= Math.cos(this.aimAngle) * def.recoil;
+    if (!this.grounded) this.vy -= Math.sin(this.aimAngle) * def.recoil * 0.6;
+    this.muzzleFlash = 0.05;
+    game.onFighterEvent(this, 'fire');
   }
 
   // On bouge d'abord en X, puis en Y, et on se recale contre les murs.
@@ -157,6 +207,24 @@ export class Fighter {
     // Visière (regarde dans la direction de visée)
     ctx.fillStyle = '#1b2440';
     ctx.fillRect(x + w / 2 + (this.facing === 1 ? 0 : -9), y + 5, 9, 6);
+
+    // Arme, orientée vers la visée
+    const shotgun = this.weapon.def.pellets > 1;
+    const len = shotgun ? 22 : 27;
+    ctx.save();
+    ctx.translate(this.shoulderX, this.shoulderY);
+    ctx.rotate(this.aimAngle);
+    ctx.fillStyle = '#a3acbf';
+    ctx.fillRect(0, -3, len, shotgun ? 7 : 5);
+    ctx.fillStyle = shotgun ? '#8c5a2b' : '#3d4356';
+    ctx.fillRect(2, -3, 9, shotgun ? 7 : 5);
+    if (this.muzzleFlash > 0) {
+      ctx.fillStyle = '#fff3b0';
+      ctx.beginPath();
+      ctx.arc(len + 5, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
