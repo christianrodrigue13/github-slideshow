@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <!-- Empêche le zoom et adapte l'affichage aux encoches des téléphones -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Jet Arena — prototype</title>
+
+  <!-- Application installable ("Ajouter à l'écran d'accueil") -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#151b2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Jet Arena">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Affiché uniquement quand le téléphone est tenu en portrait -->
+  <div id="rotate">
+    <div class="phone"></div>
+    <p>Tourne ton téléphone en paysage</p>
+  </div>
+
+  <!-- Affiché si le navigateur est trop ancien pour les modules JavaScript -->
+  <noscript><p class="nojs">JavaScript doit être activé pour jouer.</p></noscript>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
