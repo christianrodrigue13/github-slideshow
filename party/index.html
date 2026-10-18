@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#5b3fd6">
+<title>Party Plateau</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@500;600;700&display=swap">
+<style>
+/* Layout: phone-shaped column — header, board canvas, score panel; mini-games take over the screen in a 2×2 grid of player zones. One bright toy-box look. */
+:root {
+  --grape: #5b3fd6;
+  --grape-deep: #3a2596;
+  --cream: #fff6e6;
+  --ink: #261a4f;
+  --muted: #7a6fa8;
+  --sun: #ffc93c;
+  --p1: #ff5a5f;
+  --p2: #3d8bff;
+  --p3: #2fc46b;
+  --p4: #ff9f1c;
+  --display: "Luckiest Guy", "Arial Black", Impact, sans-serif;
+  --body: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--grape-deep); color: var(--ink); font-family: var(--body); overflow: hidden; user-select: none; -webkit-user-select: none; }
+#app { position: relative; height: 100%; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden;
+  background: radial-gradient(circle at 20% 10%, #7a5cf0 0, transparent 55%), var(--grape); }
+button { font: inherit; cursor: pointer; border: 0; }
+button:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--cream);
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 4px max(16px, env(safe-area-inset-left, 0px)); }
+.logo { font-family: var(--display); font-size: 1.5rem; letter-spacing: .02em; text-shadow: 0 3px 0 var(--grape-deep); }
+.turn { font-weight: 700; background: rgba(0,0,0,.2); padding: 4px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+#board { flex: 1; min-height: 0; width: 100%; display: block; }
+
+.panel { background: var(--cream); border-radius: 22px 22px 0 0; display: flex; flex-direction: column; gap: 10px;
+  padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 14px) max(16px, env(safe-area-inset-left, 0px)); }
+.scores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.ps { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 12px; border: 3px solid transparent; background: #fff; min-width: 0; }
+.ps.cur { border-color: var(--ink); transform: translateY(-3px); }
+.ps .nm { font-weight: 700; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ps .dot { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--ink); }
+.ps .vals { font-size: .8rem; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; gap: 6px; }
+.ps .vals .st { color: #d99a00; }
+.msg { margin: 0; text-align: center; font-weight: 600; min-height: 2.6em; display: grid; place-items: center; text-wrap: balance; }
+.actions { display: flex; gap: 8px; }
+.btn { flex: 1; font-family: var(--display); font-size: 1.25rem; letter-spacing: .03em; padding: 13px 14px; border-radius: 16px;
+  background: var(--sun); color: var(--ink); box-shadow: 0 5px 0 #c9940c; transition: transform .08s, box-shadow .08s; }
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #c9940c; }
+.btn.sec { background: #e6ddff; box-shadow: 0 5px 0 #b3a5e8; }
+.btn.sec:active { box-shadow: 0 1px 0 #b3a5e8; }
+
+/* Écrans plein cadre */
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; color: var(--cream);
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 24px) max(16px, env(safe-area-inset-left, 0px));
+  background: var(--grape); z-index: 5; }
+h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(2.8rem, 14vw, 4rem); line-height: .95; color: var(--sun); text-shadow: 0 5px 0 var(--grape-deep); transform: rotate(-3deg); }
+h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 2rem; text-shadow: 0 3px 0 var(--grape-deep); }
+.sub { margin: 0; opacity: .85; max-width: 30ch; }
+.card { background: var(--cream); color: var(--ink); border-radius: 20px; padding: 16px; width: min(340px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.lbl { font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: left; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.seg button { padding: 10px 0; border-radius: 12px; background: #ece6ff; font-weight: 700; color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--cream); }
+.roster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.roster div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: .8rem; font-weight: 700; }
+.roster i { width: 30px; height: 30px; border-radius: 50%; border: 3px solid var(--ink); display: block; }
+.wide { width: min(340px, 100%); flex: none; }
+
+/* Mini-jeux */
+#mg { position: absolute; inset: 0; z-index: 4; background: var(--ink); display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.zone { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; touch-action: none; overflow: hidden; color: #fff; text-align: center; padding: 8px; }
+.zone .body { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.zone .who { position: absolute; top: 8px; left: 10px; font-weight: 700; font-size: .85rem; background: rgba(0,0,0,.25); padding: 2px 8px; border-radius: 999px; }
+.zone .big { font-family: var(--display); font-size: 2.6rem; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,.25); font-variant-numeric: tabular-nums; }
+.zone .small { font-weight: 700; font-size: .9rem; }
+.zone.flip { transform: rotate(180deg); }
+.balloon { width: 40px; height: 48px; border-radius: 50% 50% 46% 46%; background: #fff; transition: transform .08s; box-shadow: inset -6px -8px 0 rgba(0,0,0,.12); }
+.gauge { position: relative; width: 44px; height: 58%; flex: none; border-radius: 22px; background: rgba(0,0,0,.28); overflow: hidden; }
+.gauge .target { position: absolute; left: 0; right: 0; height: 12%; background: rgba(255,255,255,.55); }
+.gauge .mark { position: absolute; left: -4px; right: -4px; height: 6px; background: var(--sun); border-radius: 3px; box-shadow: 0 0 0 2px var(--ink); }
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 82%; max-width: 160px; aspect-ratio: 1; }
+.pad { border-radius: 14px; opacity: .45; border: 3px solid rgba(0,0,0,.25); }
+.pad.lit { opacity: 1; transform: scale(1.06); box-shadow: 0 0 18px #fff; }
+.mg-cover { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
+  background: rgba(38, 26, 79, .9); color: var(--cream); padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); }
+.mg-cover .count { font-family: var(--display); font-size: 6rem; color: var(--sun); line-height: 1; }
+.results { width: min(340px, 100%); display: flex; flex-direction: column; gap: 6px; }
+.res { display: flex; align-items: center; gap: 10px; background: var(--cream); color: var(--ink); border-radius: 14px; padding: 8px 12px; font-weight: 700; }
+.res .rk { font-family: var(--display); font-size: 1.4rem; width: 1.6em; }
+.res i { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--ink); flex: none; }
+.res .nm { flex: 1; text-align: left; }
+.res .gain { color: #1f9e55; font-variant-numeric: tabular-nums; }
+
+.popup { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 3; background: var(--cream); color: var(--ink); border: 4px solid var(--ink);
+  border-radius: 20px; padding: 14px 20px; font-weight: 700; text-align: center; box-shadow: 0 8px 0 rgba(0,0,0,.25); width: min(300px, calc(100% - 32px)); }
+.popup b { display: block; font-family: var(--display); font-weight: 400; font-size: 1.5rem; margin-bottom: 4px; }
+@media (prefers-reduced-motion: reduce) { .btn, .balloon { transition: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top"><span class="logo">Party Plateau</span><span class="turn" id="turnLbl">Tour 1/10</span></div>
+  <canvas id="board"></canvas>
+  <div class="popup" id="popup" hidden></div>
+  <div class="panel">
+    <div class="scores" id="scores"></div>
+    <p class="msg" id="msg"></p>
+    <div class="actions" id="actions"></div>
+  </div>
+
+  <div id="mg" hidden></div>
+
+  <div class="screen" id="setup">
+    <h1>Party Plateau</h1>
+    <p class="sub">Lance le dé, ramasse des pièces, achète des étoiles et gagne les mini-jeux.</p>
+    <div class="card">
+      <span class="lbl">Joueurs humains sur ce téléphone</span>
+      <div class="seg" id="humSeg"></div>
+      <span class="lbl">Nombre de tours</span>
+      <div class="seg" id="turnSeg"></div>
+      <div class="roster" id="roster"></div>
+    </div>
+    <button class="btn wide" id="startBtn">C'est parti !</button>
+  </div>
+
+  <div class="screen" id="final" hidden></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  // ---------- Joueurs ----------
+  const COLORS = ["#ff5a5f", "#3d8bff", "#2fc46b", "#ff9f1c"];
+  const BOT_NAMES = ["Robo", "Bip", "Zorg", "Pixel"];
+  let humans = 1, maxTurns = 10, players = [], turn = 1, starTile = 0, curIdx = -1;
+
+  // ---------- Plateau : 24 cases autour d'une grille 7×7 ----------
+  const PATH = [];
+  for (let c = 0; c < 7; c++) PATH.push([c, 0]);
+  for (let r = 1; r < 7; r++) PATH.push([6, r]);
+  for (let c = 5; c >= 0; c--) PATH.push([c, 6]);
+  for (let r = 5; r >= 1; r--) PATH.push([0, r]);
+  const N = PATH.length;
+  const TYPES = ["start","blue","blue","red","blue","chance","blue","blue","red","blue","chance","blue",
+                 "blue","red","blue","blue","chance","blue","red","blue","blue","chance","blue","red"];
+  const TILE_COL = { start: "#ffffff", blue: "#3d8bff", red: "#ff5a5f", chance: "#2fc46b" };
+
+  const cv = $("board"), ctx = cv.getContext("2d");
+  let BW = 300, BH = 300;
+  function resize() {
+    const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    BW = r.width; BH = r.height;
+    cv.width = Math.round(BW * dpr); cv.height = Math.round(BH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+
+  function geom() {
+    const size = Math.min(BW - 24, BH - 16);
+    const cell = size / 7;
+    return { cell, ox: (BW - size) / 2, oy: (BH - size) / 2 };
+  }
+  function tileCenter(i) {
+    const { cell, ox, oy } = geom();
+    const [c, r] = PATH[i % N];
+    return [ox + c * cell + cell / 2, oy + r * cell + cell / 2];
+  }
+
+  let dieFace = 0, dieShow = false, t0 = performance.now();
+  function drawBoard(now) {
+    const t = (now - t0) / 1000;
+    ctx.clearRect(0, 0, BW, BH);
+    if (!players.length) return;
+    const { cell, ox, oy } = geom();
+    // Tapis central
+    ctx.fillStyle = "rgba(0,0,0,.14)";
+    rr(ox + cell * 0.9, oy + cell * 0.9, cell * 5.2, cell * 5.2, cell * 0.5); ctx.fill();
+    // Chemin
+    ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = cell * 0.18; ctx.lineJoin = "round";
+    ctx.beginPath(); PATH.forEach((_, i) => { const [x, y] = tileCenter(i); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.closePath(); ctx.stroke();
+    // Cases
+    for (let i = 0; i < N; i++) {
+      const [x, y] = tileCenter(i), s = cell * 0.78;
+      ctx.fillStyle = "rgba(0,0,0,.25)"; rr(x - s / 2, y - s / 2 + 4, s, s, s * 0.28); ctx.fill();
+      ctx.fillStyle = TILE_COL[TYPES[i]]; rr(x - s / 2, y - s / 2, s, s, s * 0.28); ctx.fill();
+      ctx.fillStyle = TYPES[i] === "start" ? "#261a4f" : "#fff";
+      ctx.font = `700 ${s * 0.42}px Fredoka, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const label = { start: "GO", blue: "+3", red: "−3", chance: "?" }[TYPES[i]];
+      ctx.fillText(label, x, y + 1);
+    }
+    // Étoile
+    { const [x, y] = tileCenter(starTile); const bob = Math.sin(t * 3) * 4;
+      ctx.fillStyle = "#ffc93c"; ctx.strokeStyle = "#261a4f"; ctx.lineWidth = 3;
+      star(x, y - cell * 0.55 + bob, cell * 0.38); ctx.fill(); ctx.stroke(); }
+    // Pions
+    const offs = [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]];
+    players.forEach((p, k) => {
+      const [tx, ty] = tileCenter(p.pos);
+      p.dx = p.dx == null ? tx : p.dx + (tx - p.dx) * 0.3;
+      p.dy = p.dy == null ? ty : p.dy + (ty - p.dy) * 0.3;
+      const hop = k === curIdx ? Math.abs(Math.sin(t * 6)) * 5 : 0;
+      const x = p.dx + offs[k][0] * cell, y = p.dy + offs[k][1] * cell - hop, r = cell * 0.2;
+      ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.beginPath(); ctx.ellipse(x, y + r + hop, r * 0.9, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = p.color; ctx.strokeStyle = "#261a4f"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.15, r * 0.25, 0, Math.PI * 2); ctx.arc(x + r * 0.3, y - r * 0.15, r * 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#261a4f"; ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.1, r * 0.11, 0, Math.PI * 2); ctx.arc(x + r * 0.3, y - r * 0.1, r * 0.11, 0, Math.PI * 2); ctx.fill();
+    });
+    // Dé au centre
+    if (dieShow) {
+      const cx = ox + cell * 3.5, cy = oy + cell * 3.5, s = cell * 1.6;
+      ctx.fillStyle = "rgba(0,0,0,.3)"; rr(cx - s / 2, cy - s / 2 + 6, s, s, s * 0.2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#261a4f"; ctx.lineWidth = 4;
+      rr(cx - s / 2, cy - s / 2, s, s, s * 0.2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#261a4f"; ctx.font = `${s * 0.6}px "Luckiest Guy", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(dieFace, cx, cy + s * 0.05);
+    } else {
+      const cx = ox + cell * 3.5, cy = oy + cell * 3.5;
+      ctx.fillStyle = "rgba(255,246,230,.9)"; ctx.font = `${cell * 0.55}px "Luckiest Guy", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(`Étoile : 20`, cx, cy - cell * 0.3);
+      ctx.font = `600 ${cell * 0.3}px Fredoka, sans-serif`;
+      ctx.fillText("passe dessus pour l'acheter", cx, cy + cell * 0.25);
+    }
+  }
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function star(x, y, r) { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } ctx.closePath(); }
+  (function loop(now) { drawBoard(now); requestAnimationFrame(loop); })(performance.now());
+
+  // ---------- Panneau ----------
+  function renderScores() {
+    $("scores").innerHTML = players.map((p, k) =>
+      `<div class="ps${k === curIdx ? " cur" : ""}"><span class="dot" style="background:${p.color}"></span><span class="nm">${p.name}</span><span class="vals"><span class="st">★${p.stars}</span><span>●${p.coins}</span></span></div>`).join("");
+    $("turnLbl").textContent = `Tour ${Math.min(turn, maxTurns)}/${maxTurns}`;
+  }
+  const say = (t) => { $("msg").textContent = t; };
+  function choose(buttons) {
+    return new Promise((res) => {
+      const a = $("actions"); a.innerHTML = "";
+      buttons.forEach((b, i) => {
+        const el = document.createElement("button");
+        el.className = "btn" + (i ? " sec" : ""); el.textContent = b;
+        el.onclick = () => { a.innerHTML = ""; res(i); };
+        a.appendChild(el);
+      });
+    });
+  }
+  async function popup(title, text, ms) {
+    const p = $("popup"); p.innerHTML = `<b>${title}</b>${text}`; p.hidden = false;
+    await sleep(ms || 1400); p.hidden = true;
+  }
+  function addCoins(p, n) { p.coins = Math.max(0, p.coins + n); renderScores(); }
+  function moveStar() {
+    const opts = []; for (let i = 1; i < N; i++) if (TYPES[i] === "blue" && i !== starTile && !players.some((p) => p.pos === i)) opts.push(i);
+    starTile = pick(opts);
+  }
+
+  // ---------- Tour de jeu ----------
+  async function playerTurn(p) {
+    curIdx = players.indexOf(p); renderScores();
+    if (p.human) { say(`À toi, ${p.name} !`); await choose(["Lancer le dé"]); }
+    else { say(`${p.name} réfléchit…`); await sleep(700); }
+    dieShow = true;
+    for (let k = 0; k < 10; k++) { dieFace = 1 + Math.floor(Math.random() * 6); await sleep(55 + k * 8); }
+    const roll = dieFace;
+    say(`${p.name} fait ${roll} !`); await sleep(500);
+    dieShow = false;
+    for (let s = 0; s < roll; s++) {
+      p.pos = (p.pos + 1) % N; await sleep(260);
+      if (p.pos === starTile) await starStop(p);
+    }
+    await land(p);
+    renderScores();
+    await sleep(400);
+  }
+
+  async function starStop(p) {
+    if (p.coins < 20) { say(`${p.name} passe l'étoile mais n'a que ${p.coins} pièces.`); await sleep(900); return; }
+    let buy;
+    if (p.human) { say(`Acheter l'étoile pour 20 pièces, ${p.name} ?`); buy = (await choose(["Acheter ★", "Non merci"])) === 0; }
+    else { buy = true; await sleep(500); }
+    if (buy) {
+      p.coins -= 20; p.stars++; renderScores();
+      await popup("★ Étoile !", `${p.name} gagne une étoile.`, 1500);
+      moveStar();
+    }
+  }
+
+  const CHANCES = [
+    { t: "Trésor !", run: (p) => { addCoins(p, 6); return `${p.name} trouve 6 pièces.`; } },
+    { t: "Trou dans la poche", run: (p) => { addCoins(p, -5); return `${p.name} perd 5 pièces.`; } },
+    { t: "Voleur", run: (p) => {
+        const rich = players.filter((q) => q !== p).sort((a, b) => b.coins - a.coins)[0];
+        const n = Math.min(5, rich.coins); addCoins(rich, -n); addCoins(p, n);
+        return `${p.name} vole ${n} pièces à ${rich.name}.`; } },
+    { t: "Partage", run: () => {
+        const tot = players.reduce((s, q) => s + q.coins, 0), each = Math.floor(tot / players.length);
+        players.forEach((q) => (q.coins = each)); renderScores();
+        return `Tout le monde a maintenant ${each} pièces.`; } },
+    { t: "L'étoile s'envole", run: () => { moveStar(); return "L'étoile change de place."; } },
+    { t: "Échange", run: (p) => {
+        const o = pick(players.filter((q) => q !== p)); [p.coins, o.coins] = [o.coins, p.coins]; renderScores();
+        return `${p.name} échange ses pièces avec ${o.name}.`; } },
+  ];
+  async function land(p) {
+    const ty = TYPES[p.pos];
+    if (ty === "blue" || ty === "start") { addCoins(p, 3); say(`${p.name} gagne 3 pièces.`); await sleep(800); }
+    else if (ty === "red") { addCoins(p, -3); say(`${p.name} perd 3 pièces.`); await sleep(800); }
+    else if (ty === "chance") { const c = pick(CHANCES); const txt = c.run(p); say(txt); await popup(c.t, txt, 1800); }
+  }
+
+  // ---------- Mini-jeux ----------
+  const mg = $("mg");
+  function makeZones() {
+    mg.innerHTML = ""; mg.hidden = false;
+    return players.map((p, k) => {
+      const z = document.createElement("div");
+      z.className = "zone" + (k < 2 && humans > 1 ? " flip" : "");
+      z.style.background = p.color;
+      z.innerHTML = `<span class="who">${p.name}${p.human ? "" : " · robot"}</span><div class="body"></div>`;
+      mg.appendChild(z);
+      return { z, body: z.querySelector(".body"), p };
+    });
+  }
+  async function cover(html, needTap) {
+    const c = document.createElement("div"); c.className = "mg-cover"; c.innerHTML = html; mg.appendChild(c);
+    if (needTap) { await new Promise((r) => { const b = c.querySelector("button"); b.onclick = r; }); }
+    return c;
+  }
+  async function intro(title, rule) {
+    const c = await cover(`<h2>${title}</h2><p class="sub">${rule}</p><button class="btn wide">Prêts ?</button>`, true);
+    for (const n of [3, 2, 1]) { c.innerHTML = `<div class="count">${n}</div>`; await sleep(600); }
+    c.remove();
+  }
+
+  async function mgMash() {
+    const Z = makeZones();
+    const counts = players.map(() => 0);
+    Z.forEach((z, k) => {
+      z.body.innerHTML = `<div class="balloon"></div><div class="big">0</div><div class="small">Tape !</div>`;
+    });
+    const upd = (k) => { Z[k].body.querySelector(".big").textContent = counts[k]; Z[k].body.querySelector(".balloon").style.transform = `scale(${1 + counts[k] * 0.045})`; };
+    await intro("Gonfle-ballon", "Tape le plus vite possible dans ta zone pour gonfler ton ballon. 6 secondes !");
+    let on = true;
+    Z.forEach((z, k) => { if (z.p.human) z.z.onpointerdown = () => { if (on) { counts[k]++; upd(k); } }; });
+    const timers = Z.map((z, k) => z.p.human ? null : setInterval(() => { if (on && Math.random() < z.p.skill * 0.62) { counts[k]++; upd(k); } }, 100));
+    await sleep(6000); on = false; timers.forEach((t) => t && clearInterval(t));
+    return counts;
+  }
+
+  async function mgReflex() {
+    const Z = makeZones();
+    const total = players.map(() => 0);
+    await intro("Réflexe", "Attends que ta zone devienne blanche, puis touche-la le plus vite possible. Trop tôt : pénalité. 3 manches !");
+    for (let round = 1; round <= 3; round++) {
+      const times = players.map(() => null);
+      Z.forEach((z) => { z.z.style.background = z.p.color; z.body.innerHTML = `<div class="big">Attends…</div><div class="small">Manche ${round}/3</div>`; });
+      let go = false, goAt = 0;
+      Z.forEach((z, k) => { z.z.onpointerdown = () => {
+        if (!z.p.human || times[k] != null) return;
+        if (!go) { times[k] = 1000; z.body.innerHTML = `<div class="big">Trop tôt !</div>`; }
+        else { times[k] = performance.now() - goAt; z.body.innerHTML = `<div class="big">${Math.round(times[k])} ms</div>`; }
+      }; });
+      await sleep(rnd(1500, 3800));
+      go = true; goAt = performance.now();
+      Z.forEach((z, k) => {
+        if (times[k] == null) { z.z.style.background = "#ffffff"; z.z.style.color = "#261a4f"; z.body.innerHTML = `<div class="big">TOUCHE !</div>`; }
+        if (!z.p.human) {
+          const rt = rnd(230, 470) / z.p.skill;
+          setTimeout(() => { if (times[k] == null) { times[k] = rt; z.body.innerHTML = `<div class="big">${Math.round(rt)} ms</div>`; } }, rt);
+        }
+      });
+      await sleep(1500);
+      Z.forEach((z, k) => { if (times[k] == null) times[k] = 1000; total[k] += times[k]; z.z.style.color = ""; });
+      await sleep(700);
+    }
+    return total.map((t) => -t);
+  }
+
+  async function mgStop() {
+    const Z = makeZones();
+    const target = rnd(0.2, 0.7);
+    const st = players.map((p) => ({ pos: 0, dir: 1, speed: rnd(0.9, 1.3), done: false }));
+    Z.forEach((z) => { z.body.innerHTML = `<div class="gauge"><div class="target" style="bottom:${target * 100}%"></div><div class="mark"></div></div><div class="small">Touche pour arrêter</div>`; });
+    await intro("Pile poil", "Arrête la barre jaune pile dans la bande blanche. Un seul essai !");
+    let on = true, last = performance.now();
+    Z.forEach((z, k) => { if (z.p.human) z.z.onpointerdown = () => { if (on) st[k].done = true; }; });
+    Z.forEach((z, k) => { if (!z.p.human) {
+      const err = (Math.random() - 0.5) * 0.24 / z.p.skill;
+      st[k].aim = Math.max(0, Math.min(0.95, target + 0.06 + err));
+    } });
+    await new Promise((res) => {
+      const t0 = performance.now();
+      (function f(now) {
+        const dt = (now - last) / 1000; last = now;
+        Z.forEach((z, k) => {
+          const s = st[k]; if (s.done) return;
+          const prev = s.pos;
+          s.pos += s.dir * s.speed * dt;
+          if (s.pos > 0.95) { s.pos = 0.95; s.dir = -1; } if (s.pos < 0) { s.pos = 0; s.dir = 1; }
+          if (s.aim != null && now - t0 > 1200 && (prev - s.aim) * (s.pos - s.aim) <= 0) s.done = true;
+          z.body.querySelector(".mark").style.bottom = `${s.pos * 100}%`;
+        });
+        if (st.every((s) => s.done) || now - t0 > 7000) return res();
+        requestAnimationFrame(f);
+      })(last);
+    });
+    on = false;
+    return st.map((s, k) => {
+      const d = Math.abs(s.pos - (target + 0.06));
+      Z[k].body.querySelector(".small").textContent = d < 0.06 ? "Parfait !" : `Écart ${Math.round(d * 100)}`;
+      return s.done ? -d : -1;
+    });
+  }
+
+  async function mgMemory() {
+    const Z = makeZones();
+    const PC = ["#ffffff", "#261a4f", "#ffc93c", "#9be7ff"];
+    Z.forEach((z) => { z.body.innerHTML = `<div class="pads">${PC.map((c, i) => `<div class="pad" data-i="${i}" style="background:${c}"></div>`).join("")}</div><div class="small">Regarde…</div>`; });
+    await intro("Mémoire", "Retiens la suite de couleurs, puis reproduis-la dans ta zone. Une erreur et tu es éliminé !");
+    const seq = [], alive = players.map(() => true), score = players.map(() => 0);
+    const flash = (i, on) => Z.forEach((z, k) => alive[k] && z.body.querySelectorAll(".pad")[i].classList.toggle("lit", on));
+    for (let round = 1; round <= 12; round++) {
+      seq.push(Math.floor(Math.random() * 4));
+      Z.forEach((z, k) => alive[k] && (z.body.querySelector(".small").textContent = `Suite de ${seq.length} — regarde…`));
+      await sleep(500);
+      for (const i of seq) { flash(i, true); await sleep(420); flash(i, false); await sleep(160); }
+      const prog = players.map(() => 0), done = players.map((_, k) => !alive[k]);
+      Z.forEach((z, k) => { if (alive[k]) z.body.querySelector(".small").textContent = "À toi !"; });
+      await new Promise((res) => {
+        const check = () => { if (done.every(Boolean)) res(); };
+        Z.forEach((z, k) => {
+          if (!alive[k]) return;
+          if (z.p.human) {
+            z.body.querySelectorAll(".pad").forEach((pad) => {
+              pad.onpointerdown = (e) => {
+                e.stopPropagation(); if (done[k]) return;
+                const i = +pad.dataset.i; pad.classList.add("lit"); setTimeout(() => pad.classList.remove("lit"), 150);
+                if (i === seq[prog[k]]) { prog[k]++; if (prog[k] === seq.length) { done[k] = true; score[k] = round; z.body.querySelector(".small").textContent = "Bravo ✓"; check(); } }
+                else { done[k] = true; alive[k] = false; z.body.querySelector(".small").textContent = "Éliminé !"; z.z.style.opacity = .45; check(); }
+              };
+            });
+          } else {
+            const ok = Math.random() < Math.min(0.97, 0.99 - (seq.length - 2) * 0.09 / z.p.skill);
+            setTimeout(() => {
+              done[k] = true;
+              if (ok) { score[k] = round; z.body.querySelector(".small").textContent = "Bravo ✓"; }
+              else { alive[k] = false; z.body.querySelector(".small").textContent = "Éliminé !"; z.z.style.opacity = .45; }
+              check();
+            }, seq.length * rnd(350, 550));
+          }
+        });
+        setTimeout(() => { Z.forEach((z, k) => { if (!done[k]) { done[k] = true; alive[k] = false; z.body.querySelector(".small").textContent = "Trop lent !"; z.z.style.opacity = .45; } }); res(); }, 4000 + seq.length * 900);
+      });
+      if (alive.filter(Boolean).length <= 1) break;
+      await sleep(600);
+    }
+    return score;
+  }
+
+  const MINIGAMES = [mgMash, mgReflex, mgStop, mgMemory];
+  let mgBag = [];
+  async function miniGameRound() {
+    if (!mgBag.length) mgBag = MINIGAMES.slice().sort(() => Math.random() - 0.5);
+    const game = mgBag.pop();
+    curIdx = -1; renderScores();
+    say("Place au mini-jeu !"); await sleep(900);
+    const scores = await game();
+    await sleep(700);
+    // Classement avec égalités
+    const order = players.map((p, k) => ({ p, s: scores[k] })).sort((a, b) => b.s - a.s);
+    const PRIZE = [10, 5, 2, 0];
+    let rank = 0;
+    order.forEach((o, i) => { if (i > 0 && o.s < order[i - 1].s) rank = i; o.rank = rank; o.gain = PRIZE[rank]; addCoins(o.p, o.gain); });
+    const c = await cover(`<h2>Résultats</h2><div class="results">${order.map((o) =>
+      `<div class="res"><span class="rk">${o.rank + 1}</span><i style="background:${o.p.color}"></i><span class="nm">${o.p.name}</span><span class="gain">+${o.gain}</span></div>`).join("")}</div><button class="btn wide">Continuer</button>`, true);
+    mg.hidden = true; mg.innerHTML = "";
+  }
+
+  // ---------- Partie ----------
+  async function runGame() {
+    for (turn = 1; turn <= maxTurns; turn++) {
+      renderScores();
+      if (turn === maxTurns) await popup("Dernier tour !", "Tout se joue maintenant.", 1600);
+      for (const p of players) await playerTurn(p);
+      await miniGameRound();
+    }
+    showFinal();
+  }
+
+  function showFinal() {
+    const order = players.slice().sort((a, b) => b.stars - a.stars || b.coins - a.coins);
+    const w = order[0];
+    const f = $("final");
+    f.innerHTML = `<h1 style="color:${w.color}">${w.name} gagne !</h1>
+      <div class="results">${order.map((p, i) => `<div class="res"><span class="rk">${i + 1}</span><i style="background:${p.color}"></i><span class="nm">${p.name}</span><span>★${p.stars} · ●${p.coins}</span></div>`).join("")}</div>
+      <button class="btn wide" id="againBtn">Nouvelle partie</button>`;
+    f.hidden = false;
+    $("againBtn").onclick = () => { f.hidden = true; $("setup").hidden = false; };
+  }
+
+  // ---------- Écran de départ ----------
+  function seg(el, values, get, set, fmt) {
+    el.innerHTML = "";
+    values.forEach((v) => {
+      const b = document.createElement("button"); b.textContent = fmt ? fmt(v) : v;
+      b.setAttribute("aria-pressed", get() === v);
+      b.onclick = () => { set(v); seg(el, values, get, set, fmt); renderRoster(); };
+      el.appendChild(b);
+    });
+  }
+  function renderRoster() {
+    $("roster").innerHTML = COLORS.map((c, k) => `<div><i style="background:${c}"></i>${k < humans ? `Joueur ${k + 1}` : `${BOT_NAMES[k]} (robot)`}</div>`).join("");
+  }
+  seg($("humSeg"), [1, 2, 3, 4], () => humans, (v) => (humans = v));
+  seg($("turnSeg"), [5, 10, 15], () => maxTurns, (v) => (maxTurns = v), (v) => `${v} tours`);
+  renderRoster();
+
+  $("startBtn").onclick = () => {
+    players = COLORS.map((color, k) => ({
+      name: k < humans ? `Joueur ${k + 1}` : BOT_NAMES[k], color, human: k < humans,
+      coins: 10, stars: 0, pos: 0, skill: rnd(0.85, 1.15),
+    }));
+    starTile = 0; moveStar(); mgBag = []; curIdx = -1;
+    $("setup").hidden = true;
+    resize(); renderScores();
+    runGame();
+  };
+  resize();
+})();
+</script>
+</body>
+</html>
