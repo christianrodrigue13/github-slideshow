@@ -36,19 +36,28 @@ button:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
 .sc.hot { background: #ff5a5f; color: #fff; }
 .sc.timer { background: var(--ink); color: var(--cream); padding-left: 10px; }
 
-.pad { position: fixed; width: 210px; height: 140px; z-index: 3; touch-action: none; }
-.pad.bl { left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); }
-.pad.br { right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); }
-.pad.tl { left: max(10px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 54px); transform: rotate(180deg); }
-.pad.tr { right: max(10px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 54px); transform: rotate(180deg); }
-.joy { position: absolute; bottom: 0; width: 124px; height: 124px; border-radius: 50%; background: rgba(255,250,240,.3); border: 3px solid var(--c); }
-.pad.bl .joy, .pad.tr .joy { left: 0; }
-.pad.br .joy, .pad.tl .joy { right: 0; }
-.knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: var(--c); border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(0,0,0,.25); }
-.act { position: absolute; bottom: 30px; width: 72px; height: 72px; border-radius: 50%; background: var(--c); border: 3px solid var(--ink); font-family: var(--display); font-size: .8rem; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.35); box-shadow: 0 5px 0 rgba(0,0,0,.25); }
-.pad.bl .act, .pad.tr .act { right: 0; }
-.pad.br .act, .pad.tl .act { left: 0; }
-.act.cd { opacity: .45; }
+.pad { position: fixed; z-index: 3; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; pointer-events: none; --s: 1; }
+.pad > * { pointer-events: auto; touch-action: none; }
+.pad.bottom { left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); }
+.pad.top { left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 48px); padding: 0 max(12px, env(safe-area-inset-left, 0px)) 0 max(12px, env(safe-area-inset-right, 0px)); transform: rotate(180deg); }
+.pad.bl, .pad.br, .pad.tl, .pad.tr { width: 50%; --s: .72; padding: 0 6px; }
+.pad.bl { left: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+.pad.br { right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+.pad.tl { left: 0; top: calc(env(safe-area-inset-top, 0px) + 46px); transform: rotate(180deg); }
+.pad.tr { right: 0; top: calc(env(safe-area-inset-top, 0px) + 46px); transform: rotate(180deg); }
+.joy { position: relative; flex: none; width: calc(120px * var(--s)); height: calc(120px * var(--s)); border-radius: 50%; background: rgba(255,250,240,.32); border: 3px solid var(--c); }
+.knob { position: absolute; left: 50%; top: 50%; width: calc(50px * var(--s)); height: calc(50px * var(--s)); transform: translate(-50%, -50%); border-radius: 50%; background: var(--c); border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.face { position: relative; flex: none; width: calc(146px * var(--s)); height: calc(146px * var(--s)); }
+.fb { position: absolute; width: calc(54px * var(--s)); height: calc(54px * var(--s)); border-radius: 50%; background: rgba(36,27,58,.82); border: 3px solid var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: 0 4px 0 rgba(0,0,0,.3); }
+.fb b { font-size: calc(22px * var(--s)); font-weight: 700; }
+.fb small { font-size: calc(9px * var(--s)); font-weight: 700; color: #fff; margin-top: 2px; max-width: 100%; overflow: hidden; white-space: nowrap; }
+.fb.t { left: 50%; top: 0; transform: translateX(-50%); } .fb.t b { color: #3fd9b0; }
+.fb.o { right: 0; top: 50%; transform: translateY(-50%); } .fb.o b { color: #ff5a73; }
+.fb.x { left: 50%; bottom: 0; transform: translateX(-50%); } .fb.x b { color: #79a6ff; }
+.fb.s { left: 0; top: 50%; transform: translateY(-50%); } .fb.s b { color: #ff86d1; }
+.fb.off { opacity: .22; }
+.fb.cd { opacity: .5; }
+.fb.down { filter: brightness(1.6); }
 
 .screen { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center;
   padding: calc(env(safe-area-inset-top, 0px) + 20px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 20px) max(16px, env(safe-area-inset-left, 0px));
@@ -109,8 +118,9 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
     <div class="roster" id="roster"></div>
     <span class="lbl">Longueur du tournoi</span>
     <div class="seg" id="lenSeg"></div>
-    <p class="keys">Téléphone : chaque joueur a un joystick et un bouton d'action dans son coin. Posez le téléphone à plat au milieu.<br>
-    Clavier : Rouge ZQSD/WASD + Espace · Bleu flèches + Entrée · Vert IJKL + U · Jaune pavé 8456 + 0.</p>
+    <p class="keys">Écran tactile : chaque joueur a un joystick et 4 boutons △ ○ ✕ □. À 2, un joueur en bas et l'autre en haut ; à 3 ou 4, un par coin (une tablette est plus confortable).<br>
+    Manettes (PS5, Xbox…) : branche-les ou connecte-les en Bluetooth, une par joueur humain.<br>
+    Clavier, 2 joueurs : Rouge ZQSD/WASD, ✕ Espace, □ F, ○ G, △ R · Bleu flèches, ✕ Entrée, □ Maj droite, ○ « / », △ « . ».</p>
   </div>
   <div class="btns">
     <button class="btn" id="tourBtn">Tournoi</button>
@@ -150,10 +160,10 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   const wrapA = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 
   const DEFS = [
-    { name: "Rouge", color: "#ff4d5a", corner: "bl", keys: { up: ["KeyW"], down: ["KeyS"], left: ["KeyA"], right: ["KeyD"], act: ["Space"] } },
-    { name: "Bleu",  color: "#3d8bff", corner: "br", keys: { up: ["ArrowUp"], down: ["ArrowDown"], left: ["ArrowLeft"], right: ["ArrowRight"], act: ["Enter", "ShiftRight"] } },
-    { name: "Vert",  color: "#2fc46b", corner: "tl", keys: { up: ["KeyI"], down: ["KeyK"], left: ["KeyJ"], right: ["KeyL"], act: ["KeyU"] } },
-    { name: "Jaune", color: "#ffc21a", corner: "tr", keys: { up: ["Numpad8"], down: ["Numpad5"], left: ["Numpad4"], right: ["Numpad6"], act: ["Numpad0"] } },
+    { name: "Rouge", color: "#ff4d5a", corner: "bl", keys: { up: ["KeyW"], down: ["KeyS"], left: ["KeyA"], right: ["KeyD"], x: ["Space"], s: ["KeyF"], o: ["KeyG"], t: ["KeyR"] } },
+    { name: "Bleu",  color: "#3d8bff", corner: "br", keys: { up: ["ArrowUp"], down: ["ArrowDown"], left: ["ArrowLeft"], right: ["ArrowRight"], x: ["Enter", "Numpad0"], s: ["ShiftRight", "Numpad1"], o: ["Slash", "Numpad2"], t: ["Period", "Numpad3"] } },
+    { name: "Vert",  color: "#2fc46b", corner: "tl", keys: { up: [], down: [], left: [], right: [], x: [], s: [], o: [], t: [] } },
+    { name: "Jaune", color: "#ffc21a", corner: "tr", keys: { up: [], down: [], left: [], right: [], x: [], s: [], o: [], t: [] } },
   ];
   let humans = 2, fillBots = true, tourLen = 5;
   const PR = 0.8, POINTS = [4, 2, 1, 0], GRAV = 24, JUMP_V = 10;
@@ -529,7 +539,10 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       const human = k < humans;
       if (!human && !fillBots) return;
       players.push({ ...d, idx: k, human, total: 0, mesh: makeChar(d.color), x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, face: 0,
-        inX: 0, inZ: 0, touchX: 0, touchZ: 0, wantAct: false, think: 0, wander: [0, 0], wanderT: 0 });
+        inX: 0, inZ: 0, touchX: 0, touchZ: 0, padX: 0, padZ: 0, acts: new Set(), cds: {}, think: 0, wander: [0, 0], wanderT: 0 });
+      const pl = players[players.length - 1];
+      pl.bubble = new THREE.Mesh(new THREE.SphereGeometry(1.25, 20, 14), new THREE.MeshBasicMaterial({ color: lin(d.color), transparent: true, opacity: 0.28, depthWrite: false }));
+      pl.bubble.position.y = 1.2; pl.bubble.visible = false; pl.mesh.g.add(pl.bubble);
     });
   }
   function startSpots() {
@@ -540,7 +553,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   function resetPlayers() {
     const spots = G && G.spots ? G.spots() : startSpots();
     players.forEach((p, i) => {
-      Object.assign(p, { x: spots[i][0], z: spots[i][1], y: 0, vx: 0, vz: 0, vy: 0, dashT: 0, cd: 0, punchT: 0, stun: 0, hitT: 0,
+      Object.assign(p, { x: spots[i][0], z: spots[i][1], y: 0, vx: 0, vz: 0, vy: 0, dashT: 0, cds: {}, guardT: 0, punchT: 0, stun: 0, hitT: 0,
         out: false, outAt: Infinity, ko: 0, sinking: false, respawnT: 0, celebrate: false, gs: 0, finished: 0 });
       p.face = L.kind === "track" ? Math.PI : Math.atan2(-p.x, -(p.z - L.cz));
       p.mesh.g.visible = true; p.mesh.g.rotation.set(0, 0, 0);
@@ -550,40 +563,77 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   const standing = () => players.filter((p) => active(p) && !p.sinking);
   const alive = () => players.filter((p) => !p.out && !p.ko);
 
-  // ---------- Contrôles ----------
+  // ---------- Contrôles : joystick + 4 boutons façon manette PS5 ----------
+  const BTN = { t: "△", o: "○", x: "✕", s: "□" };
+  const ACT_NAME = { jump: "Saut", dash: "Fonce", punch: "Poing", guard: "Bouclier", splash: "Peinture" };
+  function pressButton(p, b) {
+    if (state !== "play" || !G || !G.buttons[b]) return;
+    p.acts.add(G.buttons[b]);
+    const el = p.btnEls && p.btnEls[b]; if (el) { el.classList.add("down"); setTimeout(() => el.classList.remove("down"), 120); }
+  }
   function buildPads() {
     const root = $("pads"); root.innerHTML = "";
-    players.filter((p) => p.human).forEach((p) => {
+    const hs = players.filter((p) => p.human);
+    hs.forEach((p, i) => {
       const pad = document.createElement("div");
-      pad.className = `pad ${p.corner}`; pad.style.setProperty("--c", p.color);
-      pad.innerHTML = `<div class="joy"><div class="knob"></div></div><button class="act" aria-label="Action (${p.name})">FONCE</button>`;
+      const pos = hs.length <= 2 ? (i === 0 ? "bottom" : "top") : p.corner;
+      pad.className = `pad ${pos}`; pad.style.setProperty("--c", p.color);
+      pad.innerHTML = `<div class="joy"><div class="knob"></div></div><div class="face">${["t", "o", "x", "s"].map((b) => `<button class="fb ${b}" data-b="${b}" aria-label="${BTN[b]} (${p.name})"><b>${BTN[b]}</b><small></small></button>`).join("")}</div>`;
       root.appendChild(pad);
-      const joy = pad.querySelector(".joy"), knob = pad.querySelector(".knob"), act = pad.querySelector(".act");
-      p.actEl = act;
+      const joy = pad.querySelector(".joy"), knob = pad.querySelector(".knob");
+      p.btnEls = {}; pad.querySelectorAll(".fb").forEach((el) => { p.btnEls[el.dataset.b] = el; el.addEventListener("pointerdown", (e) => { e.preventDefault(); pressButton(p, el.dataset.b); }); });
+      const flipped = pos === "top" || pos[0] === "t";
       let pid = null;
       const upd = (e) => {
         const r = joy.getBoundingClientRect();
         let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-        const m = Math.hypot(dx, dy), max = r.width / 2 - 10;
+        const m = Math.hypot(dx, dy), max = r.width / 2 - 8;
         if (m > max) { dx *= max / m; dy *= max / m; }
-        const rot = p.corner[0] === "t" ? -1 : 1; // coin retourné : le bouton est dessiné à l'envers
-        knob.style.transform = `translate(${dx * rot}px, ${dy * rot}px)`;
+        const rot = flipped ? -1 : 1; // manette retournée : le bouton est dessiné à l'envers
+        knob.style.transform = `translate(calc(-50% + ${dx * rot}px), calc(-50% + ${dy * rot}px))`;
         p.touchX = dx / max; p.touchZ = dy / max;
       };
       joy.addEventListener("pointerdown", (e) => { pid = e.pointerId; joy.setPointerCapture(pid); upd(e); });
       joy.addEventListener("pointermove", (e) => { if (e.pointerId === pid) upd(e); });
       const end = (e) => { if (e.pointerId !== pid) return; pid = null; p.touchX = 0; p.touchZ = 0; knob.style.transform = ""; };
       joy.addEventListener("pointerup", end); joy.addEventListener("pointercancel", end);
-      act.addEventListener("pointerdown", (e) => { e.preventDefault(); p.wantAct = true; });
     });
+    labelPads();
+  }
+  function labelPads() {
+    for (const p of players) if (p.btnEls) for (const b in p.btnEls) {
+      const a = G && G.buttons ? G.buttons[b] : null, el = p.btnEls[b];
+      el.classList.toggle("off", !a); el.querySelector("small").textContent = a ? ACT_NAME[a] || a : "";
+    }
   }
   const keysDown = new Set();
   window.addEventListener("keydown", (e) => {
     keysDown.add(e.code);
     if (state !== "play") return;
-    for (const p of players) if (p.human && p.keys.act.includes(e.code)) { p.wantAct = true; e.preventDefault(); }
+    for (const p of players) if (p.human) for (const b of ["x", "o", "s", "t"]) if (p.keys[b].includes(e.code) && !e.repeat) { pressButton(p, b); e.preventDefault(); }
     if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
   });
+  // Manettes physiques (API Gamepad, disposition standard : 0 ✕, 1 ○, 2 □, 3 △)
+  const gpPrev = {};
+  function pollGamepads() {
+    const gps = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+    const hs = players.filter((p) => p.human);
+    gps.forEach((gp, i) => {
+      const prev = gpPrev[gp.index] || (gpPrev[gp.index] = {});
+      const btn = (k) => !!(gp.buttons[k] && gp.buttons[k].pressed);
+      // Dans les menus, ✕ valide le bouton principal de l'écran affiché
+      if (state !== "play" && btn(0) && !prev[0]) { const scr = document.querySelector(".screen:not([hidden]) .btn:not([disabled])"); if (scr) scr.click(); }
+      const p = hs[i];
+      if (p) {
+        let x = gp.axes[0] || 0, z = gp.axes[1] || 0;
+        if (Math.hypot(x, z) < 0.18) { x = 0; z = 0; }
+        if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) z = -1; if (btn(13)) z = 1;
+        p.padX = x; p.padZ = z;
+        [[0, "x"], [1, "o"], [2, "s"], [3, "t"]].forEach(([k, b]) => { if (btn(k) && !prev[k]) pressButton(p, b); });
+      }
+      for (let k = 0; k < 16; k++) prev[k] = btn(k);
+    });
+  }
   window.addEventListener("keyup", (e) => keysDown.delete(e.code));
   const any = (arr) => arr.some((c) => keysDown.has(c));
 
@@ -647,18 +697,18 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   // ---------- Les mini-jeux ----------
   const GAMES = {};
-  const def = (id, o) => { GAMES[id] = Object.assign({ id, action: "dash", respawn: false, shrink: false, duration: 0, layout: "round", teams: false, start() {}, update() {}, botDash: sumoDash }, o); };
+  const def = (id, o) => { GAMES[id] = Object.assign({ id, buttons: { s: "dash", o: "punch", x: "jump" }, respawn: false, shrink: false, duration: 0, layout: "round", teams: false, start() {}, update() {}, botDash: sumoDash }, o); };
 
   def("sumo", Object.assign({}, survival, {
-    name: "Bousculade", short: "Pousse les autres dans l'eau glacée", theme: "banquise", shrink: true,
-    rule: "Sur la glace, ça glisse ! Pousse les autres hors de l'île avec FONCE. L'île rétrécit après quelques secondes. Le dernier debout gagne.",
+    name: "Bousculade", short: "Pousse les autres dans l'eau glacée", theme: "banquise", shrink: true, buttons: { s: "dash", o: "punch", t: "guard", x: "jump" },
+    rule: "Sur la glace, ça glisse ! Pousse les autres hors de l'île avec □ Fonce ou ○ Poing. △ Bouclier te rend inébranlable un instant. L'île rétrécit : le dernier debout gagne.",
     done: () => standing().length <= 1 && !players.some((p) => !p.out && p.sinking),
     botGoal(p) { const [t] = nearestFoe(p); return t ? [t.x, t.z] : [0, 0]; },
   }));
 
   def("meteor", Object.assign({}, survival, {
     name: "Pluie de météores", short: "Esquive les impacts", theme: "volcan", duration: 40,
-    rule: "Des météores tombent sur l'île. Sors vite des cercles rouges ! Le dernier survivant gagne, ou tous ceux encore debout après 40 secondes.",
+    rule: "Des météores tombent sur l'île. Sors vite des cercles rouges, ou ✕ saute au dernier moment pour éviter l'impact ! ○ Poing pousse les autres dedans. Le dernier survivant gagne.",
     start() { this.list = []; this.next = 1.2; },
     update(dt) {
       this.next -= dt;
@@ -698,7 +748,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   def("coins", {
     name: "Ruée vers l'or", short: "Ramasse le plus de pièces", theme: "plage", respawn: true, duration: 30,
-    rule: "Ramasse les pièces d'or : la grosse vaut 3. Un coup de FONCE fait perdre 2 pièces à celui qui le reçoit, et tomber dans l'eau en coûte 3.",
+    rule: "Ramasse les pièces d'or : la grosse vaut 3. Un coup de □ Fonce ou de ○ Poing fait perdre 2 pièces à celui qui le reçoit, et tomber dans l'eau en coûte 3.",
     start() { this.list = []; this.nextSpawn = 0; for (let k = 0; k < 6; k++) this.spawn(); },
     spawn(x, z, big) {
       if (x == null) [x, z] = randomSpot(0.9, 1.4);
@@ -732,8 +782,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   });
 
   def("hill", {
-    name: "Roi de la colline", short: "Reste seul dans la lumière", theme: "espace", respawn: true, duration: 40,
-    rule: "Reste dans le cercle de lumière pour marquer. Si vous êtes plusieurs dedans, personne ne marque : chasse les autres ! Le cercle se déplace.",
+    name: "Roi de la colline", short: "Reste seul dans la lumière", theme: "espace", respawn: true, duration: 40, buttons: { s: "dash", o: "punch", t: "guard" },
+    rule: "Reste dans le cercle de lumière pour marquer. Si vous êtes plusieurs dedans, personne ne marque : chasse les autres avec □ et ○, résiste avec △ Bouclier ! Le cercle se déplace.",
     start() {
       this.R = 1.9; this.x = 0; this.z = 0; this.tx = 0; this.tz = 0; this.moveAt = 7;
       this.disc = new THREE.Mesh(new THREE.CircleGeometry(this.R, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }));
@@ -758,8 +808,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   });
 
   def("fragile", Object.assign({}, survival, {
-    name: "Sol fragile", short: "Les dalles s'effondrent", theme: "volcan", layout: "grid",
-    rule: "Chaque dalle sur laquelle tu marches se fissure puis tombe dans la lave. Bouge sans arrêt et garde des dalles pour la fin ! Le dernier debout gagne.",
+    name: "Sol fragile", short: "Les dalles s'effondrent", theme: "volcan", layout: "grid", buttons: { x: "jump", s: "dash" }, botPunch: false,
+    rule: "Chaque dalle sur laquelle tu marches se fissure puis tombe dans la lave. Bouge sans arrêt, ✕ saute par-dessus les trous et garde des dalles pour la fin ! Le dernier debout gagne.",
     grid() { return { kind: "grid", W: 12.6, D: 9.8, cx: 0, cz: 0, nx: 9, nz: 7, s: 1.4 }; },
     start() {
       this.tiles = [];
@@ -799,8 +849,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   }));
 
   def("bar", Object.assign({}, survival, {
-    name: "Tronc tournant", short: "Saute par-dessus le tronc", theme: "prairie", action: "jump", duration: 45,
-    rule: "Un tronc géant tourne autour de l'île et accélère. Appuie sur SAUTE au bon moment pour passer par-dessus ! S'il te touche, tu es projeté. Le dernier debout gagne.",
+    name: "Tronc tournant", short: "Saute par-dessus le tronc", theme: "prairie", buttons: { x: "jump", o: "punch" }, duration: 45,
+    rule: "Un tronc géant tourne autour de l'île et accélère. ✕ Saute au bon moment pour passer par-dessus ! ○ Poing pousse un voisin dans sa trajectoire. Le dernier debout gagne.",
     start() {
       this.a = 0; this.w = 1.3; this.dir = 1; this.arms = [];
       const hub = mk(new THREE.CylinderGeometry(0.8, 0.95, 1.2, 16), "#9a6234"); hub.position.y = 0.6; gameObjs.add(hub);
@@ -845,8 +895,10 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   }));
 
   def("paint", {
-    name: "Peinture fraîche", short: "Colorie le plus de cases", theme: "bonbons", layout: "field", duration: 30,
-    rule: "Chaque case où tu marches prend ta couleur. FONCE peint une plus grande zone. Celui qui a le plus de cases à la fin gagne !",
+    name: "Peinture fraîche", short: "Colorie le plus de cases", theme: "bonbons", layout: "field", duration: 30, buttons: { s: "dash", t: "splash", x: "jump" },
+    custom: { splash(p) { p.cds.splash = 4; p.punchT = 0.4; burst(p.x, 0.6, p.z, p.color, 14); beep(250, 0.25, "sine", 0.08); const cz = L.D / this.nz; for (let a = -3; a <= 3; a++) for (let b = -2; b <= 2; b++) if (a * a * 0.6 + b * b < 6) this.paintAt(p, p.x + a * this.cs, p.z + b * cz); } },
+    botAct(p) { return (p.cds.splash || 0) <= 0 && Math.random() < 0.06 ? "splash" : Math.random() < 0.05 ? "dash" : null; },
+    rule: "Chaque case où tu marches prend ta couleur. □ Fonce peint une bande plus large, △ lance une grosse éclaboussure de peinture autour de toi. Celui qui a le plus de cases à la fin gagne !",
     start() {
       this.nx = 20; this.nz = 13; this.cs = L.W / this.nx;
       const geo = new THREE.BoxGeometry(this.cs * 0.92, 0.06, (L.D / this.nz) * 0.92);
@@ -895,7 +947,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   def("colors", Object.assign({}, survival, {
     name: "Bonne couleur", short: "File sur la bonne couleur", theme: "espace", layout: "grid",
-    rule: "Une couleur est annoncée. Cours sur une dalle de cette couleur avant la fin du compte à rebours : toutes les autres tombent ! Le dernier debout gagne.",
+    rule: "Une couleur est annoncée. Cours sur une dalle de cette couleur avant la fin du compte à rebours : toutes les autres tombent ! ○ Poing chasse un rival de ta dalle. Le dernier debout gagne.",
     grid() { return { kind: "grid", W: 13, D: 10.4, cx: 0, cz: 0, nx: 5, nz: 4, s: 2.6 }; },
     PAL: [["Rouge", "#ff4d5a"], ["Bleu", "#3d8bff"], ["Vert", "#2fc46b"], ["Jaune", "#ffc21a"], ["Violet", "#a46bff"], ["Blanc", "#f4f4ff"]],
     start() {
@@ -945,7 +997,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   def("bomb", Object.assign({}, survival, {
     name: "Patate explosive", short: "Refile la bombe", theme: "plage",
-    rule: "Une bombe passe de robot en robot quand ils se touchent. Quand elle explose, celui qui la tient est éliminé ! Le dernier debout gagne.",
+    rule: "Une bombe passe de robot en robot quand ils se touchent ou qu'on donne un ○ Poing. Quand elle explose, celui qui la tient est éliminé ! Le dernier debout gagne.",
     start() {
       this.holder = null; this.wait = 1;
       const g = new THREE.Group();
@@ -968,6 +1020,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       if (this.timer <= 0) { burst(h.x, 1.5, h.z, "#ff8a3d", 20); shake = 0.6; beep(70, 0.5, "sawtooth", 0.1); buzz(60); knockOut(h, h.x + 0.01, h.z); this.holder = null; this.wait = 1.6; }
     },
     onTouch(a, b) { if (!this.holder || this.passCd > 0) return; if (a === this.holder) this.give(b); else if (b === this.holder) this.give(a); },
+    onHit(v, a) { if (a && a === this.holder && this.passCd <= 0) this.give(v); },
     done: () => alive().length <= 1,
     chip(p) { return this.holder === p ? "BOMBE" : survival.chip(p); },
     botGoal(p) { if (!this.holder) return wander(p, 2); if (p === this.holder) { const [t] = nearestFoe(p); return t ? [t.x, t.z] : [0, 0]; } return flee(p, this.holder); },
@@ -975,8 +1028,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   }));
 
   def("tag", {
-    name: "Chat glacé", short: "Ne sois pas le chat", theme: "banquise", respawn: true, duration: 40,
-    rule: "Le chat porte une couronne rouge. S'il te touche, c'est toi le chat ! Chaque seconde passée sans être le chat rapporte un point. Attention, ça glisse.",
+    name: "Chat glacé", short: "Ne sois pas le chat", theme: "banquise", respawn: true, duration: 40, buttons: { s: "dash", x: "jump", t: "guard" },
+    rule: "Le chat porte une flèche rouge. S'il te touche, c'est toi le chat ! Chaque seconde sans être le chat rapporte un point. △ Bouclier empêche d'être touché un instant. Attention, ça glisse.",
     start() {
       this.it = pick(players); this.cd = 1;
       this.mark = mk(new THREE.ConeGeometry(0.4, 0.8, 4), "#ff4d5a", { emissive: "#7a0000" }); this.mark.rotation.x = Math.PI; gameObjs.add(this.mark);
@@ -987,7 +1040,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       const h = this.it; this.mark.position.set(h.x, h.y + 3.2 + Math.sin(t * 6) * 0.15, h.z); this.mark.rotation.y += dt * 3;
       this.mark.visible = h.mesh.g.visible;
     },
-    onTouch(a, b) { if (this.cd > 0) return; const n = a === this.it ? b : b === this.it ? a : null; if (!n) return; this.it = n; this.cd = 1; n.stun = 0.8; beep(600, 0.15, "square"); toast(`${n.name} est le chat !`); },
+    onTouch(a, b) { if (this.cd > 0) return; const n = a === this.it ? b : b === this.it ? a : null; if (!n || n.guardT > 0) return; this.it = n; this.cd = 1; n.stun = 0.8; beep(600, 0.15, "square"); toast(`${n.name} est le chat !`); },
     done: () => timeLeft <= 0,
     score: (p) => Math.floor(p.gs * 10), value: (p) => `${p.gs.toFixed(1)} s`, chip(p) { return p === this.it ? "CHAT" : p.gs.toFixed(0); },
     botGoal(p) { if (p === this.it) { const [t] = nearestFoe(p); return t ? [t.x, t.z] : [0, 0]; } return Math.hypot(p.x - this.it.x, p.z - this.it.z) < 5 ? flee(p, this.it) : wander(p, 2.2); },
@@ -996,7 +1049,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   def("foot", {
     name: "Robo-foot", short: "2 contre 2, marque des buts", theme: "prairie", layout: "field", teams: true, duration: 45,
-    rule: "Rouge et Vert contre Bleu et Jaune. Pousse le ballon dans le but adverse, à droite pour Rouge et Vert, à gauche pour Bleu et Jaune. FONCE donne un tir puissant !",
+    rule: "Rouge et Vert contre Bleu et Jaune. Pousse le ballon dans le but adverse : à droite pour Rouge et Vert, à gauche pour Bleu et Jaune. □ Fonce donne un tir puissant, ○ Poing bouscule un adversaire, ✕ saute.",
     layoutOpts: { goals: true },
     team: (p) => (p.idx % 2 === 0 ? 0 : 1),
     spots() { return players.map((p) => [(this.team(p) === 0 ? -1 : 1) * 3.5, (p.idx < 2 ? -1 : 1) * 1.8]); },
@@ -1057,8 +1110,8 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   });
 
   def("race", {
-    name: "Course gourmande", short: "Course d'obstacles", theme: "bonbons", layout: "track", action: "jump", duration: 50,
-    rule: "Fonce jusqu'à la ligne d'arrivée ! SAUTE par-dessus les barrières en guimauve et évite les blocs qui glissent. Le premier arrivé gagne.",
+    name: "Course gourmande", short: "Course d'obstacles", theme: "bonbons", layout: "track", buttons: { x: "jump", s: "dash", o: "punch" }, duration: 50,
+    rule: "Cours jusqu'à la ligne d'arrivée ! ✕ Saute par-dessus les barrières en guimauve, □ Fonce pour accélérer et ○ Poing pour gêner les autres. Évite les blocs qui glissent !",
     start() {
       this.finishZ = -62; this.obs = []; this.order = 0;
       for (let z = -8, k = 0; z > -58; z -= 5.5, k++) {
@@ -1113,12 +1166,37 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
 
   const ORDER = Object.keys(GAMES);
 
+  // ---------- Actions des boutons ----------
+  function doAction(p, a, grounded) {
+    if ((p.cds[a] || 0) > 0 || p.sinking) return;
+    if (a === "dash") {
+      if (!grounded) return;
+      let dx = p.inX, dz = p.inZ; if (Math.hypot(dx, dz) < 0.2) { dx = Math.sin(p.face); dz = Math.cos(p.face); }
+      const m = Math.hypot(dx, dz) || 1; p.vx = dx / m * DASH_V; p.vz = dz / m * DASH_V; p.dashT = 0.28; p.cds.dash = 1.3; p.punchT = 0.55; beep(220, 0.15, "sawtooth", 0.05);
+    } else if (a === "jump") {
+      if (!grounded) return; p.vy = JUMP_V; p.y = 0.01; p.cds.jump = 0.15; beep(500, 0.12, "sine", 0.05);
+    } else if (a === "punch") {
+      p.punchT = 0.45; p.cds.punch = 0.6; beep(300, 0.06, "square", 0.04);
+      const fx = Math.sin(p.face), fz = Math.cos(p.face);
+      for (const q of players) {
+        if (q === p || !active(q) || q.sinking || Math.abs(q.y - p.y) > 1.2) continue;
+        const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+        if (d > 1.9 || (dx * fx + dz * fz) / (d || 1) < 0.3) continue;
+        if (q.guardT > 0) { p.vx -= fx * 7; p.vz -= fz * 7; p.hitT = 0.3; burst(q.x, 1.2, q.z, q.color, 5); beep(900, 0.08, "triangle", 0.05); continue; }
+        q.vx += fx * 10; q.vz += fz * 10; q.hitT = 0.35; burst(q.x, 1.2, q.z, "#ffffff", 6); shake = 0.2; buzz(20);
+        if (state === "play" && G.onHit) G.onHit(q, p);
+      }
+    } else if (a === "guard") {
+      p.guardT = 1.1; p.cds.guard = 3; beep(660, 0.15, "sine", 0.05);
+    } else if (G.custom && G.custom[a]) G.custom[a].call(G, p);
+  }
+
   // ---------- Robots pilotés par l'ordinateur ----------
   function botThink(p, dt) {
     p.think -= dt;
     if (p.think > 0) return;
     p.think = 0.09 + Math.random() * 0.1;
-    if (G.botInput) { const [ix, iz, a] = G.botInput(p); p.inX = ix; p.inZ = iz; if (a) p.wantAct = true; return; }
+    if (G.botInput) { const [ix, iz, a] = G.botInput(p); p.inX = ix; p.inZ = iz; if (a) p.acts.add(a === true ? "jump" : a); return; }
     let [tx, tz] = G.botGoal(p);
     let dx = tx - p.x, dz = tz - p.z;
     const m0 = Math.hypot(dx, dz);
@@ -1129,7 +1207,13 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
     }
     const m = Math.hypot(dx, dz);
     if (m > 0.01) { p.inX = dx / m * 0.9; p.inZ = dz / m * 0.9; } else { p.inX = p.inZ = 0; }
-    if (p.cd <= 0 && (G.botAct ? G.botAct(p) : G.action === "dash" && G.botDash(p))) p.wantAct = true;
+    const has = (a) => Object.values(G.buttons).includes(a);
+    let a = null;
+    if (G.botAct) { const r = G.botAct(p); if (r) a = r === true ? "jump" : r; }
+    else if (has("dash") && G.botDash(p)) a = "dash";
+    if (!a && has("punch") && G.botPunch !== false) { const [f, d] = nearestFoe(p); if (f && d < 1.7 && Math.random() < 0.3) { p.face = Math.atan2(f.x - p.x, f.z - p.z); a = "punch"; } }
+    if (!a && has("guard")) { const threat = players.some((q) => q !== p && active(q) && q.dashT > 0 && Math.hypot(q.x - p.x, q.z - p.z) < 3); if (threat && Math.random() < 0.5) a = "guard"; }
+    if (a) p.acts.add(a);
   }
 
   // ---------- Simulation commune ----------
@@ -1157,26 +1241,22 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       if (state === "play" && p.stun <= 0) {
         if (p.human) {
           const kx = (any(p.keys.right) ? 1 : 0) - (any(p.keys.left) ? 1 : 0), kz = (any(p.keys.down) ? 1 : 0) - (any(p.keys.up) ? 1 : 0);
-          p.inX = kx || p.touchX || 0; p.inZ = kz || p.touchZ || 0;
+          p.inX = kx || p.padX || p.touchX || 0; p.inZ = kz || p.padZ || p.touchZ || 0;
           const m = Math.hypot(p.inX, p.inZ); if (m > 1) { p.inX /= m; p.inZ /= m; }
         } else if (!p.sinking) botThink(p, dt);
-      } else { p.inX = p.inZ = 0; p.wantAct = false; }
-      p.cd = Math.max(0, p.cd - dt); p.dashT = Math.max(0, p.dashT - dt);
-      if (p.actEl) p.actEl.classList.toggle("cd", p.cd > 0);
+      } else { p.inX = p.inZ = 0; p.acts.clear(); }
+      for (const k in p.cds) p.cds[k] = Math.max(0, p.cds[k] - dt);
+      p.dashT = Math.max(0, p.dashT - dt); p.guardT = Math.max(0, p.guardT - dt);
+      if (p.btnEls) for (const b in p.btnEls) p.btnEls[b].classList.toggle("cd", (p.cds[G.buttons[b]] || 0) > 0);
       const grounded = p.y <= 0.001 && !p.sinking;
       if (!p.sinking) {
-        if (p.wantAct && p.cd <= 0 && grounded) {
-          if (G.action === "dash") {
-            let dx = p.inX, dz = p.inZ; if (Math.hypot(dx, dz) < 0.2) { dx = Math.sin(p.face); dz = Math.cos(p.face); }
-            const m = Math.hypot(dx, dz) || 1; p.vx = dx / m * DASH_V; p.vz = dz / m * DASH_V; p.dashT = 0.28; p.cd = 1.3; p.punchT = 0.55; beep(220, 0.15, "sawtooth", 0.05);
-          } else if (G.action === "jump") { p.vy = JUMP_V; p.y = 0.01; p.cd = 0.15; beep(500, 0.12, "sine", 0.05); }
-        }
-        const ctl = grounded ? 1 : 0.55;
+        for (const a of p.acts) doAction(p, a, grounded);
+        const ctl = (grounded ? 1 : 0.55) * (p.guardT > 0 ? 0.35 : 1);
         p.vx += p.inX * ACC * ctl * dt; p.vz += p.inZ * ACC * ctl * dt;
         const fr = Math.exp(-(p.dashT > 0 ? 1.5 : grounded ? fric : 1.2) * dt); p.vx *= fr; p.vz *= fr;
         const sp = Math.hypot(p.vx, p.vz); if (p.dashT <= 0 && p.hitT <= 0 && sp > MAXV) { p.vx *= MAXV / sp; p.vz *= MAXV / sp; }
       }
-      p.wantAct = false;
+      p.acts.clear();
       p.x += p.vx * dt; p.z += p.vz * dt;
       if (L.walls && !p.sinking) {
         const hx = L.W / 2 - PR * 0.7, hz = L.D / 2 - PR * 0.7;
@@ -1202,11 +1282,11 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       if (state === "play" && G.onTouch) G.onTouch(a, b);
       const rel = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
       if (rel <= 0) continue;
-      const wa = a.dashT > 0 ? 0.25 : 1, wb = b.dashT > 0 ? 0.25 : 1, imp = rel * 1.9 / (wa + wb);
+      const wa = a.guardT > 0 ? 0.08 : a.dashT > 0 ? 0.25 : 1, wb = b.guardT > 0 ? 0.08 : b.dashT > 0 ? 0.25 : 1, imp = rel * 1.9 / (wa + wb);
       a.vx -= nx * imp * wa; a.vz -= nz * imp * wa; b.vx += nx * imp * wb; b.vz += nz * imp * wb;
       if (rel > 4) {
         shake = Math.min(0.4, rel * 0.03); burst((a.x + b.x) / 2, 1, (a.z + b.z) / 2, "#ffffff", 6); beep(120 + rel * 10, 0.12, "square", 0.06); buzz(25);
-        if (state === "play" && G.onHit && rel > 6) { if (a.dashT > 0 && b.dashT <= 0) G.onHit(b); else if (b.dashT > 0 && a.dashT <= 0) G.onHit(a); }
+        if (state === "play" && G.onHit && rel > 6) { if (a.dashT > 0 && b.dashT <= 0 && b.guardT <= 0) G.onHit(b, a); else if (b.dashT > 0 && a.dashT <= 0 && a.guardT <= 0) G.onHit(a, b); }
       }
     }
     if (state === "play" && G.done()) { state = "ending"; roundDone && roundDone(); }
@@ -1231,6 +1311,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
       anim(p.mesh, a);
       p.mesh.mixer.update(dt);
       if (p.sinking) g.rotation.x += dt * 3;
+      p.bubble.visible = p.guardT > 0; if (p.guardT > 0) p.bubble.scale.setScalar(1 + Math.sin(t * 20) * 0.04);
     }
     for (let k = puffs.length - 1; k >= 0; k--) {
       const s = puffs[k]; s.life -= dt; s.vy -= 12 * dt;
@@ -1253,7 +1334,6 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   const screens = ["setup", "pick", "intro", "results", "final"];
   function show(id) { screens.forEach((s) => ($(s).hidden = s !== id)); $("hud").hidden = !(id === null || id === "intro"); }
   const waitClick = (el) => new Promise((r) => { el.onclick = () => { el.onclick = null; r(); }; });
-  const ACT_LABEL = { dash: "FONCE", jump: "SAUTE" };
 
   // ---------- Déroulement ----------
   let mode = "tour", queue = [], qi = 0;
@@ -1266,13 +1346,13 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
     resetPlayers();
     players.forEach((p) => { p.skill = p.skill || rnd(0.85, 1.15); p.goal = null; p.goalT = null; p.lane = null; });
     G.start();
-    document.querySelectorAll(".act").forEach((b) => (b.textContent = ACT_LABEL[G.action] || "ACTION"));
+    labelPads();
   }
   async function playGame(key, label) {
     setupGame(key);
     state = "intro"; renderHud(true);
     $("introStep").textContent = `${label} · ${T.name}`; $("introName").textContent = G.name; $("introRule").textContent = G.rule;
-    $("introMeta").textContent = `Bouton d'action : ${ACT_LABEL[G.action]}${G.duration ? ` · ${G.duration} secondes` : ""}${G.teams ? " · En équipes" : ""}`;
+    $("introMeta").textContent = ["t", "o", "x", "s"].filter((b) => G.buttons[b]).map((b) => `${BTN[b]} ${ACT_NAME[G.buttons[b]]}`).join(" · ") + (G.duration ? ` · ${G.duration} s` : "") + (G.teams ? " · En équipes" : "");
     show("intro");
     await waitClick($("introGo"));
     show(null); state = "count";
@@ -1364,6 +1444,7 @@ h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(
   function loop(now) {
     const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
     const t = now / 1000;
+    pollGamepads();
     if (state !== "menu" && G) step(dt, t);
     if (state === "menu") players.forEach((p, k) => { p.face += dt * (k % 2 ? 0.6 : -0.6); });
     animate(dt, t);
