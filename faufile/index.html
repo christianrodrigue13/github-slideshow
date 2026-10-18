@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0620">
+<title>Faufile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@500;700;800&display=swap">
+<style>
+/* Layout: one phone-shaped arcade screen, full bleed on mobile, centred column on desktop. Single neon-tunnel look. */
+:root {
+  --void: #0b0620;
+  --wall: #160c34;
+  --cyan: #3ef2ff;
+  --magenta: #ff3ea5;
+  --gem: #ffe14d;
+  --ink: #f4f0ff;
+  --muted: #a69bd1;
+  --line: rgba(244, 240, 255, 0.14);
+  --display: "Bungee", "Impact", "Arial Black", sans-serif;
+  --body: "Rubik", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: #05030f; color: var(--ink); font-family: var(--body); overflow: hidden; user-select: none; -webkit-user-select: none; }
+#game { position: relative; height: 100%; max-width: 480px; margin: 0 auto; overflow: hidden; background: var(--void); }
+canvas#c { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.hud {
+  position: absolute; inset: 0 0 auto; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+.score { font-family: var(--display); font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(62,242,255,.55); }
+.mult { display: inline-block; margin-top: 6px; font-family: var(--display); font-size: 1rem; color: var(--magenta); text-shadow: 0 0 12px rgba(255,62,165,.7); }
+.right { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 7px; border-radius: 999px; background: rgba(11,6,32,.6); border: 1px solid var(--line); font-weight: 800; font-variant-numeric: tabular-nums; }
+.gem { width: 14px; height: 14px; flex: none; }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; background: rgba(11,6,32,.6); border: 1px solid var(--line); color: var(--ink); font-size: 1rem; cursor: pointer; }
+
+.overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 24px) max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 24px) max(16px, env(safe-area-inset-left, 0px));
+  background: rgba(11, 6, 32, .72);
+}
+h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(3rem, 16vw, 4.6rem); line-height: .95; color: var(--ink);
+  text-shadow: 3px 3px 0 var(--magenta), -3px -3px 0 var(--cyan), 0 0 30px rgba(62,242,255,.4); }
+h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 1.8rem; }
+.tag { margin: 0; color: var(--muted); font-weight: 500; max-width: 30ch; }
+.big { font-family: var(--display); font-size: 4rem; line-height: 1; color: var(--cyan); text-shadow: 0 0 24px rgba(62,242,255,.6); font-variant-numeric: tabular-nums; }
+.almost { margin: 0; font-weight: 800; color: var(--magenta); max-width: 28ch; }
+.newbest { font-family: var(--display); color: var(--gem); font-size: 1rem; letter-spacing: .04em; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.btns { display: flex; flex-direction: column; gap: 10px; width: min(280px, 100%); }
+button { font: inherit; }
+.btn { font-family: var(--display); font-size: 1.25rem; padding: 14px 18px; border-radius: 14px; border: 2px solid var(--cyan); background: var(--cyan); color: var(--void); cursor: pointer;
+  box-shadow: 0 0 22px rgba(62,242,255,.45); transition: transform .08s; }
+.btn:active { transform: scale(.97); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); box-shadow: none; }
+.btn.hot { background: var(--magenta); border-color: var(--magenta); color: var(--ink); box-shadow: 0 0 22px rgba(255,62,165,.5); font-size: 1.05rem; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:focus-visible, .icon-btn:focus-visible, .skin:focus-visible { outline: 3px solid var(--gem); outline-offset: 3px; }
+.hint { margin: 0; font-size: .85rem; color: var(--muted); max-width: 32ch; }
+
+.shop { justify-content: flex-start; background: rgba(11,6,32,.94); }
+.shop-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.grid { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; overflow-y: auto; }
+.skin { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border-radius: 14px; background: rgba(255,255,255,.05); border: 2px solid var(--line); color: var(--ink); cursor: pointer; min-width: 0; }
+.skin.on { border-color: var(--cyan); box-shadow: 0 0 16px rgba(62,242,255,.35); }
+.skin canvas { width: 72px; height: 72px; }
+.skin b { font-size: .95rem; }
+.skin span { font-size: .8rem; color: var(--muted); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.skin.locked.cant { opacity: .5; }
+
+.ad { background: #000; }
+.ad .box { width: min(300px, 100%); aspect-ratio: 9 / 12; max-width: 100%; border: 2px dashed var(--muted); border-radius: 16px; display: grid; place-items: center; color: var(--muted); font-weight: 700; padding: 16px; }
+.toast { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-family: var(--display); font-size: 1.6rem; color: var(--ink); text-shadow: 0 0 20px var(--magenta); pointer-events: none; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div>
+      <div class="score" id="score">0</div>
+      <span class="mult" id="mult" hidden>×1</span>
+    </div>
+    <div class="right">
+      <span class="chip"><svg class="gem" viewBox="0 0 14 14"><path d="M7 0l7 7-7 7-7-7z" fill="#ffe14d"/></svg><span id="hudGems">0</span></span>
+      <button class="icon-btn" id="muteBtn" aria-label="Couper le son">♪</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <h1>Faufile</h1>
+    <p class="tag">Glisse ton doigt pour te faufiler dans le tunnel. Frôle les murs pour multiplier tes points.</p>
+    <div class="row">
+      <span class="chip">Record&nbsp;<b id="menuBest">0</b></span>
+      <span class="chip"><svg class="gem" viewBox="0 0 14 14"><path d="M7 0l7 7-7 7-7-7z" fill="#ffe14d"/></svg><span id="menuGems">0</span></span>
+    </div>
+    <div class="btns">
+      <button class="btn" id="playBtn">Jouer</button>
+      <button class="btn ghost" id="shopBtn">Vaisseaux</button>
+    </div>
+    <p class="hint">Sur ordinateur : souris ou flèches ← →.</p>
+  </div>
+
+  <div class="overlay" id="over" hidden>
+    <h2>Crash</h2>
+    <div class="big" id="overScore">0</div>
+    <span class="newbest" id="newBest" hidden>Nouveau record !</span>
+    <p class="almost" id="almost" hidden></p>
+    <div class="row">
+      <span class="chip">Record&nbsp;<b id="overBest">0</b></span>
+      <span class="chip">Frôlages&nbsp;<b id="overGraze">0</b></span>
+      <span class="chip"><svg class="gem" viewBox="0 0 14 14"><path d="M7 0l7 7-7 7-7-7z" fill="#ffe14d"/></svg>+<span id="overGems">0</span></span>
+    </div>
+    <div class="btns">
+      <button class="btn hot" id="adBtn">▶ Regarder une pub pour continuer</button>
+      <button class="btn" id="againBtn">Rejouer</button>
+      <button class="btn ghost" id="menuBtn">Menu</button>
+    </div>
+  </div>
+
+  <div class="overlay shop" id="shop" hidden>
+    <div class="shop-head">
+      <h2>Vaisseaux</h2>
+      <span class="chip"><svg class="gem" viewBox="0 0 14 14"><path d="M7 0l7 7-7 7-7-7z" fill="#ffe14d"/></svg><span id="shopGems">0</span></span>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="btns"><button class="btn ghost" id="closeShop">Retour</button></div>
+  </div>
+
+  <div class="overlay ad" id="ad" hidden>
+    <div class="box">Emplacement pub avec récompense<br>(AdMob, Poki, CrazyGames…)<br><br>Fin dans <span id="adCount">3</span> s</div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Sauvegarde ----------
+  const SAVE_KEY = "faufile-v1";
+  const save = (() => {
+    const d = { best: 0, gems: 0, owned: ["neon"], skin: "neon", muted: false };
+    try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s) return Object.assign(d, s); } catch (e) {}
+    return d;
+  })();
+  const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+
+  const SKINS = [
+    { id: "neon",    name: "Néon",        price: 0,   color: "#3ef2ff" },
+    { id: "braise",  name: "Braise",      price: 40,  color: "#ff8a3d" },
+    { id: "toxique", name: "Toxique",     price: 80,  color: "#9bff5c" },
+    { id: "rose",    name: "Bonbon",      price: 120, color: "#ff3ea5" },
+    { id: "or",      name: "Lingot",      price: 250, color: "#ffe14d" },
+    { id: "prisme",  name: "Prisme",      price: 500, color: "rainbow" },
+  ];
+  const skinColor = (s, t) => s.color === "rainbow" ? `hsl(${(t * 120) % 360},100%,62%)` : s.color;
+  const curSkin = () => SKINS.find((s) => s.id === save.skin) || SKINS[0];
+
+  // ---------- Son ----------
+  let ac = null;
+  function beep(freq, dur, type, vol) {
+    if (save.muted) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || "square"; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.05, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+      o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + dur);
+    } catch (e) {}
+  }
+  function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+  // ---------- Canvas ----------
+  const cv = $("c"), ctx = cv.getContext("2d");
+  let W = 360, H = 640;
+  function resize() {
+    const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize); resize();
+
+  // ---------- Tunnel ----------
+  const SEG = 10, SHIP_R = 9, GRAZE = 16;
+  let rows, base, gen, pillars, gems, parts, dist, speed, score, mult, grazeCount, lastGraze, grazing, runGems, ship, state, shake, invuln, revived, time = 0, zone;
+
+  const meters = () => Math.floor(dist / 20);
+  const diff = () => Math.min(1, meters() / 1500);
+
+  function genRow() {
+    const i = base + rows.length;
+    const prev = rows[rows.length - 1];
+    const d = diff();
+    const maxHW = W * 0.3, minHW = Math.max(30, W * 0.1);
+    if (Math.abs(gen.cx - gen.tcx) < 2 || Math.random() < 0.004) {
+      gen.tcx = W * 0.15 + Math.random() * W * 0.7;
+      gen.twTarget = (maxHW + (minHW - maxHW) * d) * (0.8 + Math.random() * 0.45);
+    }
+    const step = 1.4 + d * 2.4;
+    gen.cx += Math.max(-step, Math.min(step, (gen.tcx - gen.cx) * 0.06));
+    gen.hw += (gen.twTarget - gen.hw) * 0.04;
+    const hw = Math.max(minHW * 0.9, gen.hw);
+    const cx = Math.max(hw + 6, Math.min(W - hw - 6, gen.cx));
+    gen.cx = cx;
+    rows.push({ cx, hw });
+    const wy = i * SEG;
+    if (i > 80) {
+      if (hw > 62 && Math.random() < 0.004 + d * 0.012 && wy - gen.lastPillar > 260) {
+        const w = hw * (0.35 + Math.random() * 0.2);
+        const room = hw - w / 2 - 36;
+        if (room > 0) {
+          pillars.push({ wy, x: cx + (Math.random() * 2 - 1) * room, w, h: 16 });
+          gen.lastPillar = wy;
+        }
+      }
+      if (Math.random() < 0.018) {
+        const edge = Math.random() < 0.6;
+        const off = edge ? (Math.random() < 0.5 ? -1 : 1) * (hw - 16) : (Math.random() * 2 - 1) * (hw - 20);
+        gems.push({ wy, x: cx + off });
+      }
+    }
+    return prev;
+  }
+  function rowAt(i) {
+    i = Math.max(base, i);
+    while (base + rows.length <= i + 1) genRow();
+    return rows[i - base];
+  }
+  function tunnelAt(wy) {
+    const f = wy / SEG, i = Math.floor(f), t = f - i;
+    const a = rowAt(i), b = rowAt(i + 1);
+    return { cx: a.cx + (b.cx - a.cx) * t, hw: a.hw + (b.hw - a.hw) * t };
+  }
+
+  const shipY = () => H * 0.74;
+
+  function reset() {
+    rows = []; base = 0; pillars = []; gems = []; parts = [];
+    gen = { cx: W / 2, tcx: W / 2, hw: W * 0.36, twTarget: W * 0.36, lastPillar: 0 };
+    for (let k = 0; k < 4; k++) rows.push({ cx: W / 2, hw: W * 0.36 });
+    dist = 0; speed = 4.2; score = 0; mult = 1; grazeCount = 0; lastGraze = -10; grazing = false;
+    runGems = 0; shake = 0; invuln = 0; revived = false; zone = 0;
+    ship = { x: W / 2, trail: [] };
+  }
+
+  // ---------- Contrôles ----------
+  const keys = { left: false, right: false };
+  let drag = null;
+  cv.addEventListener("pointerdown", (e) => { drag = { id: e.pointerId, x: e.clientX }; cv.setPointerCapture && cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", (e) => {
+    if (state !== "play") return;
+    if (drag && drag.id === e.pointerId) { ship.x += (e.clientX - drag.x) * 1.25; drag.x = e.clientX; }
+    else if (e.pointerType === "mouse" && !drag) { const r = cv.getBoundingClientRect(); ship.x += ((e.clientX - r.left) - ship.x) * 0.35; }
+  });
+  for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { drag = null; });
+  const KEYMAP = { ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right" };
+  window.addEventListener("keydown", (e) => {
+    if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if ((e.code === "Space" || e.code === "Enter") && (state === "menu" || state === "over") && $("shop").hidden && e.target === document.body) { e.preventDefault(); play(); }
+  });
+  window.addEventListener("keyup", (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+
+  // ---------- Simulation ----------
+  function step() {
+    time += 1 / 60;
+    speed = 4.2 + diff() * 5.3;
+    dist += speed;
+    ship.x += ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)) * 6.5;
+    ship.x = Math.max(SHIP_R, Math.min(W - SHIP_R, ship.x));
+    ship.trail.unshift(ship.x); if (ship.trail.length > 22) ship.trail.pop();
+
+    // Purge
+    const minIdx = Math.floor((dist - H) / SEG);
+    if (minIdx > base + 5) { rows.splice(0, minIdx - base); base = minIdx; }
+    pillars = pillars.filter((p) => p.wy > dist - H);
+    gems = gems.filter((g) => g.wy > dist - H && !g.got);
+
+    // Zones
+    const z = Math.floor(meters() / 400);
+    if (z > zone) { zone = z; toast(`Zone ${z + 1}`); beep(660, 0.25, "triangle", 0.06); }
+
+    // Collision avec les murs (3 points du vaisseau)
+    let minGap = Infinity, hit = false;
+    for (const dy of [-SHIP_R, 0, SHIP_R]) {
+      const t = tunnelAt(dist + dy);
+      const gl = (ship.x - SHIP_R * 0.8) - (t.cx - t.hw);
+      const gr = (t.cx + t.hw) - (ship.x + SHIP_R * 0.8);
+      minGap = Math.min(minGap, gl, gr);
+      if (gl < 0 || gr < 0) hit = true;
+    }
+    for (const p of pillars) {
+      const sy = p.wy - dist;
+      if (Math.abs(sy) < p.h / 2 + SHIP_R) {
+        const gx = Math.abs(ship.x - p.x) - p.w / 2 - SHIP_R * 0.8;
+        if (gx < 0) hit = true; else minGap = Math.min(minGap, gx);
+      }
+    }
+    if (invuln > 0) { invuln -= 1 / 60; if (hit) { const t = tunnelAt(dist); ship.x += (t.cx - ship.x) * 0.2; } hit = false; }
+    if (hit) return crash();
+
+    // Frôlage
+    const nowGrazing = minGap < GRAZE;
+    if (nowGrazing && !grazing) {
+      grazeCount++; mult = Math.min(8, mult + 1); lastGraze = time;
+      beep(300 + mult * 90, 0.08, "square", 0.04); buzz(8);
+    }
+    grazing = nowGrazing;
+    if (grazing) {
+      lastGraze = time; shake = Math.max(shake, 1.5);
+      if (Math.random() < 0.6) spark(ship.x + (Math.random() < 0.5 ? -1 : 1) * SHIP_R, shipY(), skinColor(curSkin(), time));
+    }
+    if (time - lastGraze > 2.5 && mult > 1) { mult = 1; }
+    score += (speed / 20) * mult * (grazing ? 2 : 1);
+
+    // Gemmes
+    for (const g of gems) {
+      if (!g.got && Math.abs(g.wy - dist) < 16 && Math.abs(g.x - ship.x) < 18) {
+        g.got = true; runGems++; save.gems++; score += 25 * mult;
+        beep(1200, 0.1, "sine", 0.06);
+        for (let k = 0; k < 8; k++) spark(g.x, shipY(), "#ffe14d");
+      }
+    }
+    updateParts();
+  }
+
+  function spark(x, y, color) {
+    parts.push({ x, y, vx: (Math.random() - 0.5) * 3, vy: Math.random() * 3 + 1, life: 1, color });
+  }
+  function updateParts() {
+    for (const p of parts) { p.x += p.vx; p.y += p.vy; p.life -= 0.035; }
+    parts = parts.filter((p) => p.life > 0);
+  }
+
+  function crash() {
+    state = "dying";
+    shake = 14; buzz([40, 30, 60]);
+    beep(120, 0.4, "sawtooth", 0.08);
+    const col = skinColor(curSkin(), time);
+    for (let k = 0; k < 40; k++) {
+      const a = Math.random() * Math.PI * 2, v = 1 + Math.random() * 5;
+      parts.push({ x: ship.x, y: shipY(), vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.4, color: k % 3 ? col : "#ffffff" });
+    }
+    setTimeout(gameOver, 750);
+  }
+
+  // ---------- Rendu ----------
+  function render() {
+    const hue = 280 + (zone * 47) % 360;
+    const edge = `hsl(${hue % 360},100%,62%)`;
+    ctx.save();
+    if (shake > 0.2) { ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake); shake *= 0.88; }
+
+    ctx.fillStyle = "#0b0620"; ctx.fillRect(-20, -20, W + 40, H + 40);
+    // Lignes de vitesse
+    ctx.strokeStyle = "rgba(244,240,255,.05)"; ctx.lineWidth = 1;
+    const off = dist % 40;
+    for (let y = -40 + off; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    if (rows && rows.length) {
+      const sy0 = shipY();
+      const lo = Math.floor((dist - (H - sy0)) / SEG) - 1, hi = Math.ceil((dist + sy0) / SEG) + 1;
+      const pts = [];
+      for (let i = hi; i >= lo; i--) { const r = rowAt(i); pts.push({ y: sy0 - (i * SEG - dist), l: r.cx - r.hw, r: r.cx + r.hw }); }
+      // Murs
+      ctx.fillStyle = "#160c34";
+      ctx.beginPath(); ctx.moveTo(-20, pts[0].y);
+      for (const p of pts) ctx.lineTo(p.l, p.y);
+      ctx.lineTo(-20, pts[pts.length - 1].y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(W + 20, pts[0].y);
+      for (const p of pts) ctx.lineTo(p.r, p.y);
+      ctx.lineTo(W + 20, pts[pts.length - 1].y); ctx.closePath(); ctx.fill();
+      // Bords lumineux
+      for (const [w, a] of [[9, 0.18], [3, 1]]) {
+        ctx.strokeStyle = edge; ctx.globalAlpha = a; ctx.lineWidth = w; ctx.lineJoin = "round";
+        ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p.l, p.y) : ctx.moveTo(p.l, p.y)); ctx.stroke();
+        ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p.r, p.y) : ctx.moveTo(p.r, p.y)); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Piliers
+      for (const p of pillars) {
+        const y = sy0 - (p.wy - dist);
+        if (y < -30 || y > H + 30) continue;
+        ctx.fillStyle = "#160c34"; ctx.fillRect(p.x - p.w / 2, y - p.h / 2, p.w, p.h);
+        ctx.strokeStyle = "#ff3ea5"; ctx.lineWidth = 3; ctx.strokeRect(p.x - p.w / 2, y - p.h / 2, p.w, p.h);
+      }
+      // Gemmes
+      for (const g of gems) {
+        const y = sy0 - (g.wy - dist);
+        if (y < -20 || y > H + 20) continue;
+        const s = 7 + Math.sin(time * 6 + g.wy) * 1.2;
+        ctx.fillStyle = "#ffe14d";
+        ctx.beginPath(); ctx.moveTo(g.x, y - s); ctx.lineTo(g.x + s, y); ctx.lineTo(g.x, y + s); ctx.lineTo(g.x - s, y); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // Vaisseau
+    if (ship && state !== "dying" && state !== "over") {
+      const sk = curSkin(), y = shipY();
+      ship.trail.forEach((x, k) => {
+        ctx.globalAlpha = (1 - k / ship.trail.length) * 0.5;
+        ctx.fillStyle = skinColor(sk, time - k * 0.03);
+        const r = SHIP_R * (1 - k / ship.trail.length) * 0.8;
+        ctx.beginPath(); ctx.arc(x, y + 8 + k * speed * 0.9, r, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = invuln > 0 && Math.floor(time * 12) % 2 ? 0.3 : 1;
+      drawShip(ctx, ship.x, y, 1, sk, time);
+      ctx.globalAlpha = 1;
+    }
+    for (const p of parts) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function drawShip(c, x, y, s, sk, t) {
+    const col = skinColor(sk, t);
+    c.save(); c.translate(x, y); c.scale(s, s);
+    c.fillStyle = col; c.strokeStyle = "#ffffff"; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(0, -14); c.lineTo(10, 10); c.lineTo(0, 5); c.lineTo(-10, 10); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = "#0b0620"; c.beginPath(); c.ellipse(0, -2, 2.6, 4, 0, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  // ---------- Écrans ----------
+  function show(id) {
+    for (const s of ["menu", "over", "shop", "ad"]) $(s).hidden = s !== id;
+    $("hud").hidden = !(id === null || id === "over");
+  }
+  function goMenu() {
+    state = "menu"; reset();
+    $("menuBest").textContent = save.best; $("menuGems").textContent = save.gems;
+    show("menu");
+  }
+  function play() { reset(); state = "play"; show(null); try { ac && ac.resume(); } catch (e) {} }
+  let prevBest = 0;
+  function gameOver() {
+    state = "over";
+    const s = Math.floor(score);
+    prevBest = save.best;
+    const isBest = s > save.best;
+    if (isBest) save.best = s;
+    persist();
+    $("overScore").textContent = s;
+    $("overBest").textContent = save.best;
+    $("overGraze").textContent = grazeCount;
+    $("overGems").textContent = runGems;
+    $("newBest").hidden = !isBest;
+    const gap = prevBest - s;
+    const al = $("almost");
+    al.hidden = !(gap > 0 && gap <= Math.max(50, prevBest * 0.25));
+    al.textContent = `Plus que ${gap} points pour battre ton record !`;
+    $("adBtn").hidden = revived;
+    show("over");
+  }
+  function revive() {
+    show("ad");
+    let n = 3; $("adCount").textContent = n;
+    const iv = setInterval(() => {
+      n--; $("adCount").textContent = n;
+      if (n <= 0) {
+        clearInterval(iv);
+        revived = true; invuln = 2.2; parts = [];
+        const t = tunnelAt(dist); ship.x = t.cx; ship.trail = [];
+        state = "play"; show(null);
+      }
+    }, 1000);
+  }
+
+  $("playBtn").onclick = play;
+  $("againBtn").onclick = play;
+  $("menuBtn").onclick = goMenu;
+  $("adBtn").onclick = revive;
+  $("shopBtn").onclick = () => { renderShop(); show("shop"); };
+  $("closeShop").onclick = goMenu;
+  $("muteBtn").onclick = () => { save.muted = !save.muted; persist(); $("muteBtn").textContent = save.muted ? "✕" : "♪"; };
+  $("muteBtn").textContent = save.muted ? "✕" : "♪";
+
+  function renderShop() {
+    $("shopGems").textContent = save.gems;
+    const grid = $("grid"); grid.innerHTML = "";
+    for (const sk of SKINS) {
+      const owned = save.owned.includes(sk.id), on = save.skin === sk.id;
+      const b = document.createElement("button");
+      b.className = "skin" + (on ? " on" : "") + (owned ? "" : " locked") + (!owned && save.gems < sk.price ? " cant" : "");
+      const c = document.createElement("canvas"); c.width = 144; c.height = 144;
+      const x = c.getContext("2d"); x.fillStyle = "#0b0620"; x.fillRect(0, 0, 144, 144);
+      drawShip(x, 72, 76, 3.4, sk, 1.2);
+      b.appendChild(c);
+      const n = document.createElement("b"); n.textContent = sk.name; b.appendChild(n);
+      const p = document.createElement("span");
+      p.innerHTML = on ? "Équipé" : owned ? "Équiper" : `<svg class="gem" viewBox="0 0 14 14"><path d="M7 0l7 7-7 7-7-7z" fill="#ffe14d"/></svg>${sk.price}`;
+      b.appendChild(p);
+      b.onclick = () => {
+        if (!owned) {
+          if (save.gems < sk.price) { toast("Pas assez de gemmes"); return; }
+          save.gems -= sk.price; save.owned.push(sk.id); beep(900, 0.15, "triangle", 0.06);
+        }
+        save.skin = sk.id; persist(); renderShop();
+      };
+      grid.appendChild(b);
+    }
+  }
+
+  let toastT;
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 1100);
+  }
+
+  // ---------- Boucle ----------
+  let last = performance.now(), acc = 0;
+  function loop(now) {
+    acc += Math.min(0.1, (now - last) / 1000); last = now;
+    while (acc >= 1 / 60) {
+      if (state === "play") step();
+      else if (state === "menu") { time += 1 / 60; dist += 3; ship.x = tunnelAt(dist).cx + Math.sin(time * 2) * 10; ship.trail.unshift(ship.x); if (ship.trail.length > 22) ship.trail.pop(); const m = Math.floor((dist - H) / SEG); if (m > base + 5) { rows.splice(0, m - base); base = m; } }
+      else { time += 1 / 60; updateParts(); }
+      acc -= 1 / 60;
+    }
+    render();
+    if (state === "play") {
+      $("score").textContent = Math.floor(score);
+      $("hudGems").textContent = save.gems;
+      const m = $("mult"); m.hidden = mult <= 1; m.textContent = `×${mult}`;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  goMenu();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
