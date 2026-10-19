@@ -130,6 +130,14 @@ export function cosmetic(key, id) {
   return t.list.find((x) => x.id === id) || t.list[0];
 }
 
+// Apparence prête à l'emploi (couleurs, motif, traînée…) à partir des choix
+// de l'écran Style (identifiants). Sert aussi pour les invités entre amis.
+export function resolveCosmetics(c = {}) {
+  return { color: cosmetic('color', c.color).color, pattern: cosmetic('pattern', c.pattern).id,
+           trail: cosmetic('trail', c.trail),
+           skin: c.skin, hair: c.hair, hairColor: c.hairColor, face: c.face };
+}
+
 export function isUnlocked(item, p) {
   return levelInfo(p.xp).level >= item.level;
 }

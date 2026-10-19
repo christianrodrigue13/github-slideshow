@@ -318,8 +318,8 @@ export class Fighter {
       ctx.stroke();
     }
 
-    // --- Nom et petite barre de vie au-dessus des bots ---
-    if (this.isBot && showName) {
+    // --- Nom et petite barre de vie au-dessus des bots (et des amis, entre amis) ---
+    if ((this.isBot || this.remoteHuman) && showName) {
       const ratio = this.health / CONFIG.fighter.maxHealth;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(x - 7, y - 14, w + 14, 5);

@@ -11,8 +11,11 @@ import { Scenery } from './scenery.js';
 import { drawHides, canSee } from './hiding.js';
 import { load, save } from './save.js';
 import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights,
-         playerWon } from './match.js';
-import { loadProfile, saveProfile, finishMatch, cosmetic, isUnlocked, COSMETIC_TYPES } from './progress.js';
+         playerWon, startGuestMatch, rosterOf, removeFighter } from './match.js';
+import { loadProfile, saveProfile, finishMatch, isUnlocked, COSMETIC_TYPES,
+         resolveCosmetics } from './progress.js';
+import { Net } from './net.js';
+import { HostSync, GuestSync } from './netgame.js';
 import { initBackup, openBackup, backupIsOpen } from './backup.js';
 import { loadJournal, journalStart, journalTouch, journalEnd, clearJournal } from './journal.js';
 import { loadOptions, cycleOption, aimAssistStrength, aimSpeed } from './options.js';
@@ -79,6 +82,9 @@ function currentQuality() {
 // Ce dont les écrans de menu ont besoin
 const menuCtx = {
   game, settings, options, profile, journal,
+  get net() { return net; },            // (jeu entre amis, défini plus bas)
+  get lobby() { return lobby; },
+  get pseudo() { return pseudo; },
   summary: null,                        // résumé d'XP de la dernière partie
   overTime: 0,                          // temps depuis la fin (animation de la barre d'XP)
   stylePreview: { ...profile.cosmetics },   // choix affiché sur l'écran Style
@@ -87,11 +93,150 @@ let optionsReturn = 'menu';     // écran où revenir en quittant un sous-écran
 
 // Apparence du joueur pour la partie (cosmétiques équipés)
 function playerCosmetics() {
-  const c = profile.cosmetics;
-  return { color: cosmetic('color', c.color).color, pattern: cosmetic('pattern', c.pattern).id,
-           trail: cosmetic('trail', c.trail),
-           skin: c.skin, hair: c.hair, hairColor: c.hairColor, face: c.face };
+  return resolveCosmetics(profile.cosmetics);
 }
+
+// ---------------------------------------------------------------------
+// Jeu entre amis (même Wi-Fi) : net.js parle au serveur de l'ordinateur,
+// netgame.js synchronise la partie. Ici : les écrans et l'enchaînement.
+// ---------------------------------------------------------------------
+const net = new Net();
+let sync = null;                 // HostSync (hôte) ou GuestSync (invité) pendant une partie
+const lobby = {
+  guests: [],                    // (hôte) invités : { peer, name, cosmetics }
+  info: null,                    // (invité) ce que l'hôte a envoyé : nom, joueurs, réglages
+  error: '',                     // dernier message d'erreur à afficher
+  settings: { map: settings.map, mode: settings.mode, difficulty: settings.difficulty, bots: 2 },
+};
+let pseudo = load('pseudo', { name: '' }).name || `Joueur${Math.floor(10 + Math.random() * 90)}`;
+let roomsTimer = 0;
+
+// Liste des joueurs et réglages, envoyée à tous les invités du salon
+function broadcastLobby() {
+  const players = [pseudo, ...lobby.guests.map((g) => g.name)];
+  lobby.info = { host: pseudo, code: net.code, players, settings: { ...lobby.settings } };
+  net.toAll({ k: 'lobby', ...lobby.info });
+}
+
+// Ouvre l'écran "Entre amis" (connexion au serveur si besoin)
+function openMulti() {
+  lobby.error = '';
+  setState('multi');
+  net.connect().then((ok) => { if (ok) net.listRooms(); });
+}
+
+function changePseudo() {
+  let name = null;
+  try { name = window.prompt('Ton pseudo (14 lettres maximum) :', pseudo); } catch (_) { /* rien */ }
+  if (name && name.trim()) {
+    pseudo = name.trim().slice(0, 14);
+    save('pseudo', { name: pseudo });
+  }
+}
+
+// Quitte la partie entre amis (le serveur prévient les autres)
+function leaveNet(error = '') {
+  net.leave();
+  if (sync) sync.stop?.();
+  sync = null;
+  game.net = null;
+  lobby.guests = [];
+  lobby.info = null;
+  lobby.error = error;
+}
+
+// Hôte : lance la partie pour tout le monde
+function beginHostMatch() {
+  try { if (!history.state || !history.state.jeu) history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
+  net.setOpen(false);                            // plus personne ne rejoint pendant la partie
+  if (sync) sync.stop();
+  startMatch(lobby.settings, playerCosmetics(), lobby.guests, pseudo);
+  game.net = 'host';
+  sync = new HostSync(net);
+  net.toAll({ k: 'start', settings: lobby.settings, roster: rosterOf() });
+  menuCtx.summary = null;
+  updateCamera(0, true);
+  setState('playing');
+}
+
+// Invité : l'hôte a lancé la partie
+function beginGuestMatch(d) {
+  try { if (!history.state || !history.state.jeu) history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
+  startGuestMatch(d.settings, d.roster, net.id);
+  game.net = 'guest';
+  sync = new GuestSync(net);
+  menuCtx.summary = null;
+  updateCamera(0, true);
+  setState('playing');
+}
+
+// Messages du serveur et des autres joueurs
+function handleNet() {
+  for (const m of net.takeMessages()) {
+    if (m.t === 'cree') {                        // notre partie est créée : salon
+      lobby.guests = [];
+      broadcastLobby();
+      setState('lobby');
+    } else if (m.t === 'rejoint') {
+      lobby.info = null;
+      setState('lobby');
+    } else if (m.t === 'erreur') {
+      lobby.error = m.texte;
+      net.listRooms();
+    } else if (m.t === 'arrivee') {              // (hôte) un ami arrive
+      if (!lobby.guests.some((g) => g.peer === m.id)) {
+        lobby.guests.push({ peer: m.id, name: m.nom, cosmetics: resolveCosmetics(m.d || {}) });
+      }
+      broadcastLobby();
+      sound.play('pickup');
+    } else if (m.t === 'depart') {               // (hôte) un ami s'en va
+      lobby.guests = lobby.guests.filter((g) => g.peer !== m.id);
+      const f = game.net === 'host' && game.fighters.find((o) => o.peer === m.id);
+      if (f) {
+        removeFighter(f);
+        net.toAll({ k: 'gone', nid: f.nid });
+      }
+      broadcastLobby();
+    } else if (m.t === 'fermee' || m.t === 'coupe') {
+      const text = m.t === 'fermee' ? "L'hôte a quitté la partie." : 'Connexion au serveur perdue.';
+      leaveNet(text);
+      resetMatch();
+      openMulti();
+      lobby.error = text;
+    } else if (m.t === 'msg') {
+      const d = m.d || {};
+      if (game.net === 'host' || net.isHost) {
+        if (sync && sync.onMessage) sync.onMessage(m.de, d);
+      } else if (d.k === 'lobby') {
+        if (!game.player && (!lobby.info || lobby.info.settings.map !== d.settings.map)) showMenuMap(d.settings.map);
+        lobby.info = d;
+      } else if (d.k === 'start') {
+        beginGuestMatch(d);
+      } else if (d.k === 's' && game.net === 'guest') {
+        sync.apply(d);
+      } else if (d.k === 'end' && game.net === 'guest' && state !== 'over') {
+        endMatch();
+      } else if (d.k === 'gone' && game.net === 'guest') {
+        const f = game.fighters.find((o) => o.nid === d.nid);
+        if (f) removeFighter(f);
+      }
+    }
+  }
+}
+
+// Une mise à jour de la partie entre amis (hôte : règles ; invité : affichage)
+function netStep(dt, cmd) {
+  if (game.net === 'guest') {
+    sync.update(dt, cmd);
+    return false;
+  }
+  sync.beforeUpdate();
+  const over = updateMatch(dt, cmd);
+  sync.afterUpdate();
+  return over;
+}
+const IDLE_CMD = { moveX: 0, up: false, aimX: 1, aimY: 0, fire: false,
+                   switchWeapon: false, reload: false, throwGrenade: false };
 
 // L'état de la partie vit dans match.js ; on lui confie le son et les réglages
 game.sound = sound;
@@ -184,8 +329,22 @@ function setState(s) {
 // Une mise à jour de la logique (toujours 1/60 s)
 // ---------------------------------------------------------------------
 function update(dt) {
+  // Messages du jeu entre amis
+  if (net.inbox.length) handleNet();
   // Téléphone tenu en portrait pendant la partie → pause automatique
   if (state === 'playing' && input.touchMode && view.h > view.w) setState('paused');
+
+  // Entre amis, la partie continue pendant la pause (on ne bouge plus, c'est tout)
+  if (state !== 'playing' && game.net && game.player && state !== 'over') {
+    IDLE_CMD.aimX = Math.cos(game.player.aimAngle);
+    IDLE_CMD.aimY = Math.sin(game.player.aimAngle);
+    if (netStep(dt, IDLE_CMD)) { endMatch(); return; }
+  }
+  // Écran "Entre amis" : la liste des parties se met à jour toute seule
+  if (state === 'multi' && net.status === 'on' && (roomsTimer -= dt) <= 0) {
+    net.listRooms();
+    roomsTimer = 1.5;
+  }
 
   if (state !== 'playing') {
     if (state === 'over') menuCtx.overTime += dt;
@@ -206,6 +365,7 @@ function update(dt) {
     if (input.takePause()) {
       if (state === 'paused') setState('playing');
       else if (SUB_SCREENS.includes(state)) setState(optionsReturn);
+      else if (state === 'multi') setState('menu');
     }
     return;
   }
@@ -222,7 +382,7 @@ function update(dt) {
     if (options.autoFire && enemyInSights(playerCmd)) playerCmd.fire = true;
   }
   if (window.__forceFire) { playerCmd.fire = true; playerCmd.aimX = 1; playerCmd.aimY = -0.08; }   // (tests)
-  if (updateMatch(dt, playerCmd)) {
+  if (game.net ? netStep(dt, playerCmd) : updateMatch(dt, playerCmd)) {
     endMatch();
     return;
   }
@@ -236,7 +396,12 @@ const SUB_SCREENS = ['options', 'missions', 'style', 'stats', 'journal'];
 
 // Partie terminée normalement : XP, missions, statistiques
 function endMatch() {
-  journalEnd(journal, journalEntry, game.time, 'terminée');
+  if (game.net === 'host') {
+    net.toAll(sync.snapshot());                  // dernier état (scores définitifs)
+    net.toAll({ k: 'end' });
+    net.setOpen(true);                           // de nouveaux amis peuvent rejoindre
+  }
+  if (!game.net) journalEnd(journal, journalEntry, game.time, 'terminée');
   menuCtx.summary = finishMatch(profile, {
     won: playerWon(), mode: game.mode, duration: game.time,
     hillPoints: game.player.hillPoints, stats: game.stats,
@@ -265,8 +430,40 @@ function handleMenuTaps() {
     if (id === 'play') {
       wantFullscreen = true;       // fait au moment où le doigt se lève (voir plus bas)
       beginMatch();
+    } else if (id === 'replay' && game.net === 'host') {
+      beginHostMatch();
     } else if (id === 'replay' || id === 'restart') {
       beginMatch();
+    } else if (id === 'multi') {
+      wantFullscreen = true;
+      openMulti();
+    } else if (id === 'back-menu') {
+      lobby.error = '';
+      setState('menu');
+    } else if (id === 'multi-retry') {
+      openMulti();
+    } else if (id === 'pseudo') {
+      changePseudo();
+    } else if (id === 'create') {
+      lobby.error = '';
+      net.create(pseudo);
+    } else if (id && id.startsWith('room:')) {
+      lobby.error = '';
+      net.join(id.slice(5), pseudo, profile.cosmetics);
+    } else if (id === 'launch') {
+      beginHostMatch();
+    } else if (id === 'tolobby') {
+      if (sync) sync.stop();                     // (la partie finie s'efface : retour au salon)
+      sync = null;
+      game.net = null;
+      resetMatch();
+      broadcastLobby();
+      setState('lobby');
+    } else if (id === 'leave') {
+      leaveNet();
+      goToMainMenu();
+    } else if (id && id.startsWith('lob:')) {
+      changeLobbySetting(id.slice(4));
     } else if (id === 'mainmenu') {
       goToMainMenu();
     } else if (SUB_SCREENS.includes(id)) {
@@ -298,6 +495,23 @@ function handleMenuTaps() {
   }
 }
 
+// Salon (hôte) : réglages de la partie entre amis
+function changeLobbySetting(id) {
+  const [key, dirStr] = id.split(':');
+  const dir = Number(dirStr);
+  const L = lobby.settings;
+  const cycle = (list, cur) => list[(list.indexOf(cur) + dir + list.length) % list.length];
+  if (key === 'map') {
+    L.map = (L.map + dir + MAPS.length) % MAPS.length;
+    showMenuMap(L.map);
+  }
+  if (key === 'mode') L.mode = cycle(['ffa', 'teams', 'hill'], L.mode);
+  if (key === 'difficulty') L.difficulty = cycle(DIFFS, L.difficulty);
+  if (key === 'bots') L.bots = (L.bots + dir + 8) % 8;                 // 0 à 7 bots
+  sound.play('switch');
+  broadcastLobby();
+}
+
 // Boutons ◀ ▶ du menu : id = "réglage:sens" (ex. "map:+1")
 function changeSetting(id) {
   const [key, dirStr] = id.split(':');
@@ -315,12 +529,19 @@ function changeSetting(id) {
   saveSettings();
 }
 
+// La carte affichée en fond des menus
+function showMenuMap(i) {
+  if (game.map.def !== MAPS[i]) game.map = new GameMap(MAPS[i]);
+  centerMenuCamera();
+}
+
 function goToMainMenu() {
+  if (game.net || net.inRoom) leaveNet();
   journalEnd(journal, journalEntry, game.time, 'abandonnée');   // (sans effet si déjà terminée)
   resetMatch();
   view.zoom = 1;
   view.scale = view.baseScale;
-  centerMenuCamera();
+  showMenuMap(settings.map);
   setState('menu');
 }
 
@@ -603,6 +824,7 @@ window.__debug = () => ({
 window.__game = game;   // (tests automatiques uniquement)
 window.__input = input;
 window.__menuButtons = () => menuButtons(state, view, menuCtx);
+window.__net = net;
 
 centerMenuCamera();
 requestAnimationFrame(frame);

@@ -31,7 +31,7 @@ function settingValue(key, settings) {
   if (key === 'map') return MAPS[settings.map].name;
   if (key === 'mode') return MODE_NAMES[settings.mode];
   if (key === 'difficulty') return CONFIG.difficulties[settings.difficulty].label;
-  return String(settings.bots);
+  return settings.bots ? String(settings.bots) : 'Aucun';
 }
 
 // Ajoute une ligne de réglage : [◀] [valeur (touche = suivant)] [▶]
@@ -65,7 +65,10 @@ export function menuButtons(state, view, m) {
       settingRow(list, row.key, row.label, settingValue(row.key, m.settings), x0, y, rw, rh);
       y += rh + rgap;
     }
-    list.push({ id: 'play', label: 'JOUER', x: cx, y: y + rgap * 0.5, w: bw, h: bh, kind: 'primary' });
+    // JOUER (seul contre les bots) et ENTRE AMIS (même Wi-Fi)
+    const pw = Math.min(bw, (rw - 10) / 2);
+    list.push({ id: 'play', label: 'JOUER', x: view.w / 2 - pw - 5, y: y + rgap * 0.5, w: pw, h: bh, kind: 'primary' });
+    list.push({ id: 'multi', label: 'Entre amis', x: view.w / 2 + 5, y: y + rgap * 0.5, w: pw, h: bh });
     // Barre du bas : les autres écrans
     const done = m.profile.missions.list.filter((x) => x.done).length;
     const extra = [['missions', `Missions ${done}/${m.profile.missions.list.length}`],
@@ -82,6 +85,13 @@ export function menuButtons(state, view, m) {
   if (state === 'paused') {
     const g2 = bh * 0.25, y0 = view.h * 0.27;
     const b2 = (id, label, i, kind) => ({ id, label, x: cx, y: y0 + i * (bh + g2), w: bw, h: bh, kind });
+    if (m.game.net) {                    // entre amis : la partie continue, on ne peut pas recommencer
+      return [
+        b2('resume', 'Reprendre', 0, 'primary'),
+        b2('options', 'Options', 1),
+        b2('leave', 'Quitter la partie', 2),
+      ];
+    }
     return [
       b2('resume', 'Reprendre', 0, 'primary'),
       b2('restart', 'Recommencer', 1),
@@ -138,6 +148,54 @@ export function menuButtons(state, view, m) {
     list.push({ id: 'import', label: 'Importer', x: x3 + w3 + 8, y, w: w3, h: bh });
     list.push({ id: 'back', label: 'Retour', x: x3 + 2 * (w3 + 8), y, w: w3, h: bh, kind: 'primary' });
     return list;
+  }
+
+  if (state === 'multi') {
+    const w = Math.min(view.w - 40, 380 * u), x = view.w / 2 - w / 2;
+    const y1 = view.h - bh - 12 * u;
+    if (m.net.status !== 'on') {
+      if (m.net.status === 'error') list.push({ id: 'multi-retry', label: 'Réessayer', x: cx, y: view.h * 0.62, w: bw, h: bh, kind: 'primary' });
+      list.push({ id: 'back-menu', label: 'Retour', x: cx, y: y1, w: bw, h: bh });
+      return list;
+    }
+    const rh = Math.min(34 * u, view.h * 0.085), gap = rh * 0.25;
+    list.push({ id: 'pseudo', label: `Pseudo : ${m.pseudo}  ✎`, x, y: view.h * 0.2, w: w * 0.48, h: rh, kind: 'small' });
+    list.push({ id: 'create', label: 'Créer une partie', x: x + w * 0.52, y: view.h * 0.2, w: w * 0.48, h: rh, kind: 'primary' });
+    const open = m.net.rooms.filter((r) => r.ouverte).slice(0, 4);
+    open.forEach((r, i) => {
+      list.push({ id: `room:${r.code}`, label: `Rejoindre : partie de ${r.nom}  ·  ${r.joueurs} joueur${r.joueurs > 1 ? 's' : ''}`,
+                  x, y: view.h * 0.2 + (rh + gap) * (i + 2), w, h: rh });
+    });
+    list.push({ id: 'back-menu', label: 'Retour', x: cx, y: y1, w: bw, h: bh });
+    return list;
+  }
+
+  if (state === 'lobby') {
+    const y1 = view.h - bh - 12 * u, w2 = bw * 0.9;
+    if (m.net.isHost) {
+      const rw = Math.min(view.w * 0.5, 320 * u), rh = Math.min(32 * u, view.h * 0.08), x0 = view.w * 0.46;
+      SETTING_ROWS.forEach((row, i) => {
+        settingRow(list, `lob:${row.key}`, row.label, settingValue(row.key, m.lobby.settings),
+                   x0, view.h * 0.22 + i * rh * 1.2, rw, rh);
+      });
+      list.push({ id: 'launch', label: 'Lancer', x: view.w / 2 - w2 - 6 * u, y: y1, w: w2, h: bh, kind: 'primary' });
+      list.push({ id: 'leave', label: 'Quitter', x: view.w / 2 + 6 * u, y: y1, w: w2, h: bh });
+    } else {
+      list.push({ id: 'leave', label: 'Quitter', x: cx, y: y1, w: bw, h: bh });
+    }
+    return list;
+  }
+
+  if (state === 'over' && m.game.net) {
+    const w2 = bw * 0.9, y = view.h - bh - 12 * u;
+    if (m.game.net === 'host') {
+      return [
+        { id: 'replay', label: 'Rejouer', x: view.w / 2 - w2 * 1.5 - 8 * u, y, w: w2, h: bh, kind: 'primary' },
+        { id: 'tolobby', label: 'Salon', x: view.w / 2 - w2 / 2, y, w: w2, h: bh },
+        { id: 'leave', label: 'Quitter', x: view.w / 2 + w2 / 2 + 8 * u, y, w: w2, h: bh },
+      ];
+    }
+    return [{ id: 'leave', label: 'Quitter', x: view.w / 2 - w2 / 2, y, w: w2, h: bh }];
   }
 
   if (state === 'over') {
@@ -227,6 +285,13 @@ export function drawMenu(ctx, state, view, m) {
     ctx.fillText('Pause', cx, view.h * 0.15);
   }
 
+  if (state === 'multi') drawMulti(ctx, view, m, u);
+  if (state === 'lobby') drawLobby(ctx, view, m, u);
+  if (state === 'over' && game.net === 'guest') {
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = '#aab4d4';
+    ctx.fillText("L'hôte peut relancer une partie : reste sur cet écran.", cx, view.h - 76 * u);
+  }
   if (state === 'missions') drawMissions(ctx, view, m.profile, u);
   if (state === 'style') drawStyle(ctx, view, m, u);
   if (state === 'stats') drawStats(ctx, view, m.profile, u);
@@ -304,6 +369,90 @@ export function drawMenu(ctx, state, view, m) {
   }
 
   drawButtons(ctx, menuButtons(state, view, m), u);
+}
+
+// ---------------------------------------------------------------------
+// Écrans du jeu entre amis
+// ---------------------------------------------------------------------
+function drawMulti(ctx, view, m, u) {
+  const cx = view.w / 2;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(24 * u);
+  ctx.fillText('Entre amis', cx, view.h * 0.08);
+  ctx.font = font(11 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText('Chacun sur son téléphone, tous sur le même Wi-Fi.', cx, view.h * 0.14);
+  const st = m.net.status;
+  if (st === 'connecting') {
+    ctx.fillStyle = '#fff';
+    ctx.font = font(15 * u);
+    ctx.fillText('Connexion au serveur…', cx, view.h * 0.4);
+  } else if (st !== 'on') {
+    ctx.fillStyle = '#ffa8a8';
+    ctx.font = font(15 * u);
+    ctx.fillText('Le serveur « entre amis » ne répond pas.', cx, view.h * 0.3);
+    ctx.fillStyle = '#dfe6ff';
+    ctx.font = font(12 * u, false);
+    ctx.fillText("Sur l'ordinateur, lance le jeu avec :  python3 serveur.py", cx, view.h * 0.4);
+    ctx.fillText('(au lieu de « python3 -m http.server »), puis réessaie.', cx, view.h * 0.47);
+  } else {
+    const open = m.net.rooms.filter((r) => r.ouverte);
+    ctx.font = font(12 * u, false);
+    ctx.fillStyle = '#aab4d4';
+    const rh = Math.min(34 * u, view.h * 0.085);
+    ctx.fillText(open.length ? 'Parties ouvertes :' : 'Aucune partie ouverte pour l\'instant : crée la tienne !',
+                 cx, view.h * 0.2 + rh * 1.62);
+  }
+  if (m.lobby.error) {
+    ctx.fillStyle = '#ffa8a8';
+    ctx.font = font(12 * u);
+    ctx.fillText(m.lobby.error, cx, view.h - 76 * u);
+  }
+}
+
+function drawLobby(ctx, view, m, u) {
+  const cx = view.w / 2;
+  const info = m.lobby.info;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(22 * u);
+  ctx.fillText(info ? `Partie de ${info.host}` : 'Connexion à la partie…', cx, view.h * 0.08);
+  if (!info) return;
+  ctx.font = font(11 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText(m.net.isHost ? 'Tes amis voient ta partie dans « Entre amis » → Rejoindre.'
+                            : "En attente : c'est l'hôte qui lance la partie.", cx, view.h * 0.14);
+  // Liste des joueurs
+  const x = m.net.isHost ? Math.max(24, view.safeL + 16) : cx - 140 * u;
+  ctx.textAlign = 'left';
+  ctx.font = font(13 * u);
+  ctx.fillStyle = '#ffb347';
+  ctx.fillText(`Joueurs (${info.players.length}/8)`, x, view.h * 0.23);
+  ctx.font = font(13 * u, false);
+  info.players.forEach((name, i) => {
+    ctx.fillStyle = name === m.pseudo ? '#ffe066' : '#fff';
+    ctx.fillText(`${i === 0 ? '★ ' : '• '}${name}`, x, view.h * 0.23 + (i + 1) * 20 * u);
+  });
+  if (info.settings.bots) {
+    ctx.fillStyle = '#aab4d4';
+    ctx.fillText(`+ ${info.settings.bots} bot${info.settings.bots > 1 ? 's' : ''}`, x,
+                 view.h * 0.23 + (info.players.length + 1) * 20 * u);
+  }
+  // Réglages (l'invité les voit sans pouvoir les changer)
+  if (!m.net.isHost) {
+    const S = info.settings;
+    const lines = [['Carte', MAPS[S.map].name], ['Mode', MODE_NAMES[S.mode]],
+                   ['Difficulté des bots', CONFIG.difficulties[S.difficulty].label]];
+    lines.forEach(([k, v], i) => {
+      const yy = view.h * 0.23 + i * 22 * u;
+      ctx.fillStyle = '#aab4d4';
+      ctx.fillText(k, cx + 10 * u, yy);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.fillText(v, cx + 280 * u, yy);
+      ctx.textAlign = 'left';
+    });
+  }
+  ctx.textAlign = 'center';
 }
 
 // ---------------------------------------------------------------------

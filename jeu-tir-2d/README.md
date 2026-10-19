@@ -5,8 +5,9 @@
 Un prototype jouable **dans le navigateur du téléphone** : un personnage avec
 jetpack, du tir dans toutes les directions, des parties de 3 minutes contre
 des bots, sur 3 cartes, en chacun pour soi, en équipes ou en « Roi de la
-colline », avec de la progression (niveaux, missions du jour, styles). Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
-amusant avant d'investir dans des serveurs ou l'App Store.
+colline », avec de la progression (niveaux, missions du jour, styles), et des
+parties **entre amis** : chacun sur son téléphone, sur le même Wi-Fi (voir la
+partie 3). Pas encore de jeu en ligne avec des inconnus.
 
 Graphismes et sons sont **entièrement générés par le code** (aucune image ni
 aucun son externe) : rien ne vient d'un autre jeu.
@@ -44,20 +45,21 @@ Il te faut le dossier `jeu-tir-2d` sur ton ordinateur. Deux façons :
 
 ### Étape 2 — Lancer le petit serveur
 
-Ouvre un terminal **dans le dossier `jeu-tir-2d`**, puis tape **une** de ces
-commandes :
+Ouvre un terminal **dans le dossier `jeu-tir-2d`**, puis tape :
 
 ```bash
-python3 -m http.server 3400 --bind 0.0.0.0
+python3 serveur.py
 ```
 
-ou, si tu as Node.js installé :
+(Sur Windows, si `python3` n'est pas reconnu, essaie `python serveur.py` ou
+`py serveur.py`. Il faut Python 3.7 ou plus récent, rien d'autre à installer.)
 
-```bash
-npx serve -l 3400
-```
+Le serveur affiche directement l'adresse à taper sur les téléphones, du genre
+`http://192.168.1.23:3400` : tu peux alors sauter l'étape 3.
 
-(Sur Windows, si `python3` n'est pas reconnu, essaie `python` ou `py` à la place.)
+Ce serveur sert le jeu **et** relie les téléphones pour jouer entre amis. Pour
+jouer seul, l'ancienne commande marche toujours (`python3 -m http.server 3400
+--bind 0.0.0.0` ou `npx serve -l 3400`), mais sans le bouton « Entre amis ».
 
 Laisse ce terminal ouvert pendant que tu joues. Pour arrêter : `Ctrl + C`.
 
@@ -98,7 +100,9 @@ C'est l'adresse de ton ordinateur sur ton réseau Wi-Fi, du genre `192.168.1.23`
 ## 2. Jouer sans ordinateur allumé (mise en ligne gratuite)
 
 Le jeu n'est fait que de fichiers simples : on peut le mettre en ligne
-gratuitement et obtenir un lien qui marche partout.
+gratuitement et obtenir un lien qui marche partout. (Le mode **Entre amis** a
+besoin de `serveur.py` : il ne marche pas avec ces hébergements, seulement avec
+l'ordinateur de la partie 1.)
 
 ### Option A — Netlify Drop (le plus simple, 2 minutes)
 
@@ -136,7 +140,43 @@ Le jeu s'ouvrira alors en plein écran, sans la barre d'adresse.
 
 ---
 
-## 3. Les contrôles
+## 3. Jouer entre amis (même Wi-Fi)
+
+Chacun joue **sur son propre téléphone**, dans la même partie, avec ou sans
+bots en plus (jusqu'à 8 joueurs humains).
+
+1. Sur l'ordinateur, lance **`python3 serveur.py`** (voir partie 1). Laisse la
+   fenêtre ouverte.
+2. Tous les téléphones se connectent **au même Wi-Fi** que l'ordinateur et
+   ouvrent l'adresse affichée par le serveur (ex. `http://192.168.1.23:3400`).
+3. Un joueur touche **Entre amis → Créer une partie**. Il devient l'**hôte** :
+   il choisit la carte, le mode (chacun pour soi, équipes, roi de la colline),
+   la difficulté et le nombre de bots (0 à 7).
+4. Les autres touchent **Entre amis**, et la partie apparaît dans la liste :
+   **Rejoindre : partie de …**. Leur nom s'affiche dans le salon de l'hôte.
+5. L'hôte touche **Lancer**. À la fin, **Rejouer** relance avec les mêmes
+   joueurs ; **Salon** permet de changer les réglages (et d'accueillir de
+   nouveaux amis).
+
+Bon à savoir :
+- Le bouton **Pseudo ✎** permet de choisir le nom affiché au-dessus de toi.
+- Chacun garde **son apparence** (écran Style) et gagne **son XP**, ses
+  missions et ses statistiques.
+- En équipes, les humains sont répartis à tour de rôle entre les Bleus et les
+  Rouges, puis les bots équilibrent.
+- La partie tourne **sur le téléphone de l'hôte** : il doit rester dans le jeu
+  (s'il quitte ou met son téléphone en veille, la partie s'arrête pour tout le
+  monde). Les invités peuvent quitter quand ils veulent.
+- Pendant la pause, la partie continue (les autres jouent encore !).
+- Pas de ralenti après une élimination entre amis (il ralentirait tout le monde).
+- Si « Entre amis » affiche « le serveur ne répond pas », c'est que le jeu a été
+  lancé avec `python3 -m http.server` : relance-le avec `python3 serveur.py`.
+- Le Wi-Fi d'un partage de connexion (point d'accès d'un téléphone) marche
+  aussi, à condition que l'ordinateur y soit connecté.
+
+---
+
+## 4. Les contrôles
 
 ### Sur téléphone
 
@@ -170,7 +210,7 @@ inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir a
 
 ---
 
-## 4. Le menu principal
+## 5. Le menu principal
 
 | Bouton | Ce qu'il fait |
 |---|---|
@@ -178,6 +218,8 @@ inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir a
 | **Mode** | Chacun pour soi · Équipes (Bleus contre Rouges, 2 c. 2 ou 3 c. 3 selon le nombre de bots) · Roi de la colline |
 | **Difficulté** | Facile, Normal, Difficile : précision, réflexes et agressivité des bots |
 | **Bots** | de 3 à 7 |
+| **JOUER** | une partie seul contre les bots |
+| **Entre amis** | une partie avec tes amis, chacun sur son téléphone (voir partie 3) |
 | **Missions** | les 3 missions du jour et leur avancement |
 | **Style** | apparence de ton personnage : peau, coiffure, cheveux, visage, veste, motif, traînée |
 | **Stats** | tes statistiques + la sauvegarde de secours |
@@ -187,7 +229,7 @@ En haut à gauche : ton **niveau** et ta barre d'XP. Tous tes choix sont mémori
 
 ---
 
-## 5. Les règles
+## 6. Les règles
 
 - **Chacun pour soi** : tout le monde se tire dessus. Classement aux éliminations.
 - **Équipes** : les balles traversent tes coéquipiers (pas de tir ami) ; l'équipe
@@ -252,7 +294,7 @@ précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé
 
 ---
 
-## 6. Ce qui aide à jouer (sensations)
+## 7. Ce qui aide à jouer (sensations)
 
 - **Aide à la visée** (téléphone) : la visée glisse un peu vers un ennemi proche du viseur.
 - **Tir automatique** (option) : tu tires seul dès qu'un ennemi est dans le viseur.
@@ -265,7 +307,7 @@ précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé
 
 ---
 
-## 7. Options
+## 8. Options
 
 | Option | Choix |
 |---|---|
@@ -281,7 +323,7 @@ précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé
 
 ---
 
-## 8. Progression (pour revenir jouer)
+## 9. Progression (pour revenir jouer)
 
 - **XP** à chaque partie **terminée** : participation, éliminations, victoire,
   points de colline, missions. Les **niveaux** montent ; l'écran de fin montre
@@ -303,7 +345,7 @@ vider les données du navigateur efface la progression — d'où la sauvegarde d
 
 ---
 
-## 9. Journal de bêta (écran caché)
+## 10. Journal de bêta (écran caché)
 
 Sur le menu principal, **appuie longuement (1 seconde) sur le titre « JET ARENA »**.
 Tu vois, pour cet appareil : nombre de parties lancées, terminées, abandonnées
@@ -314,7 +356,7 @@ abandonnée. Ces chiffres restent sur le téléphone (rien n'est envoyé) ; le b
 
 ---
 
-## 10. Changer l'équilibrage
+## 11. Changer l'équilibrage
 
 **Tout se règle dans un seul fichier : `src/config.js`**, commenté en français.
 Change un nombre, enregistre, recharge la page.
@@ -328,6 +370,7 @@ Change un nombre, enregistre, recharge la page.
 | des cachettes plus ou moins efficaces | `hiding` : `revealTime`, `detectDistance`, `botHideHealth`… |
 | déplacer / ajouter des buissons | `hides` de chaque carte, dans `src/map.js` |
 | d'autres peaux, coiffures, couleurs | `cosmetics.skins`, `hairs`, `hairColors`, `faces` |
+| jeu entre amis : messages par seconde, recalage | `network` (`sendEvery`, `snapDistance`…) |
 | plus ou moins de grenades | `grenades` : `start`, `max`, `perAmmoCrate`, `cooldown` |
 | une explosion plus grosse | `blastRadius` et `knockback` de `rocket` / `grenade` |
 | plus de soin / bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
@@ -347,7 +390,7 @@ d'apparition, objets, zone de colline.
 
 ---
 
-## 11. Organisation des fichiers (pour un développeur)
+## 12. Organisation des fichiers (pour un développeur)
 
 ```
 jeu-tir-2d/
@@ -379,13 +422,22 @@ jeu-tir-2d/
     ├── journal.js   journal local anonyme des parties
     ├── backup.js    fenêtre de sauvegarde de secours
     ├── save.js      lecture/écriture protégées sur l'appareil (localStorage)
-    └── audio.js     sons Web Audio générés + vibrations
+    ├── audio.js     sons Web Audio générés + vibrations
+    ├── net.js       connexion au serveur de l'ordinateur (entre amis)
+    └── netgame.js   synchronisation hôte ↔ invités (commandes, instantanés)
 ```
 
-**Préparation du multijoueur** : le personnage ne lit jamais l'écran ni le
-clavier ; il reçoit une commande `{ moveX, up, aimX, aimY, fire, switchWeapon,
-reload }` venant de `input.js` (joueur) ou `bot.js` (bots). La logique tourne à
-pas fixe (1/60 s), identique sur tous les appareils.
+Et à la racine : `serveur.py`, le petit serveur (fichiers du jeu + relais
+entre les téléphones).
+
+**Jeu entre amis** : le personnage ne lit jamais l'écran ni le clavier ; il
+reçoit une commande `{ moveX, up, aimX, aimY, fire, switchWeapon, reload,
+throwGrenade }` venant de `input.js` (joueur), de `bot.js` (bots) ou du réseau
+(invités). Le téléphone hôte fait tourner les règles et envoie 30 fois par
+seconde un « instantané » (positions, balles, objets, chrono + événements) ;
+les invités affichent ces instantanés en glissant entre deux, et prédisent
+leur propre déplacement pour ne pas sentir de retard. `serveur.py` ne fait que
+transmettre les messages (WebSocket écrit à la main, sans bibliothèque).
 
 Aucune dépendance, aucune installation ; il faut juste un serveur web (les
 navigateurs refusent les modules JavaScript ouverts en double-cliquant).

@@ -42,6 +42,10 @@ export const game = {
   feed: [],             // fil des éliminations
   time: 0,
   timeLeft: CONFIG.rules.matchDuration,
+  // Jeu entre amis (voir netgame.js) : null en solo, 'host' sur le téléphone qui
+  // fait tourner la partie, 'guest' sur les téléphones des invités
+  net: null,
+  emit: null,           // (hôte) fonction qui note chaque événement pour les invités
 
   // Un tir de "tireur" peut-il toucher "cible" ? (jamais soi-même)
   // (en équipes : jamais un coéquipier, les balles le traversent)
@@ -70,7 +74,6 @@ export const game = {
       absorbedTotal = absorbed;
     }
     target.health -= amount;
-    target.hitFlash = 0.12;
     target.vx += pushX;
     target.vy += pushY;
     if (attacker && attacker !== target) {
@@ -78,25 +81,10 @@ export const game = {
       target.lastAttackTime = game.time;
       target.lastHitWeapon = weaponId;
     }
-    if (attacker === game.player && target !== game.player) addFloater(target, total, absorbedTotal);
-    if (target === game.player && attacker && attacker !== target) {
-      game.hurtMarks.push({ angle: Math.atan2(attacker.cy - target.cy, attacker.cx - target.cx),
-                            time: game.time });
-      if (game.hurtMarks.length > 6) game.hurtMarks.shift();
-    }
-    if (attacker === game.player && target !== game.player) {
-      game.hitMarks.push({ x: target.cx, y: target.cy, life: CONFIG.feel.hitMarkerTime,
-                           kill: target.health <= 0 });
-      if (game.hitMarks.length > 6) game.hitMarks.shift();
-    }
-    if (target === game.player) {
-      game.sound.play('hurt');
-      game.vibrate(CONFIG.feedback.vibrateOnHit);
-      game.addShake(CONFIG.feel.shakeHurt);
-    } else if (attacker === game.player) {
-      game.sound.play('hitmark');
-    }
-    if (target.health <= 0) killFighter(target, attacker);
+    const killed = target.health <= 0;
+    presentDamage(target, attacker, total, absorbedTotal, killed);
+    emit(['dmg', target.nid, attacker ? attacker.nid : -1, Math.round(total), Math.round(absorbedTotal), killed ? 1 : 0]);
+    if (killed) killFighter(target, attacker);
   },
 
   // Explosion : dégâts qui diminuent avec la distance, bloqués par les
@@ -116,29 +104,20 @@ export const game = {
       const push = (def.knockback ?? 650) * k;
       game.damage(f, def.damage * k * self, owner, nx * push, ny * push - 150 * k, def.id);
     }
-    // Effets : onde de choc, flammes, éclats, fumée, tremblement d'écran
-    const fx = game.effects;
-    fx.blast(x, y, R);
-    fx.sparks(x, y, '#ffd43b', 16, BLAST_FIRE);
-    fx.sparks(x, y, '#ff6b2b', 16, BLAST_FLAME);
-    fx.sparks(x, y, '#495057', 8, BLAST_DEBRIS);
-    for (let i = 0; i < 8; i++) fx.smoke(x, y, 12);
-    const vol = hearingVolumeAt(x, y);
-    game.sound.play('explosion', vol);
-    game.addShake(CONFIG.feel.shakeExplosion * vol);
+    presentExplosion(x, y, R);
+    emit(['boom', Math.round(x), Math.round(y), R]);
   },
 
   // Quelqu'un ramasse un objet
   onPickup(f, pickup) {
-    if (f === game.player) {
-      game.sound.play('pickup');
-      game.stats.pickups++;
-    }
+    presentPickup(f);
+    emit(['pick', f.nid]);
   },
 
   // Petites étincelles (opts : voir effects.js)
   sparks(x, y, color, n, opts) {
     game.effects.sparks(x, y, color, n, opts);
+    if (!opts) emit(['sp', Math.round(x), Math.round(y), color, n]);
   },
 
   // Tremblement d'écran (multiplié par l'option choisie : 0 = désactivé)
@@ -154,6 +133,25 @@ export const game = {
 
   // Événements des personnages → sons, vibrations, douilles
   onFighterEvent(f, name) {
+    presentFighterEvent(f, name);
+    emit(['ev', f.nid, name]);
+  },
+};
+
+// ---------------------------------------------------------------------
+// "Présentation" : tout ce qui se voit ou s'entend (sons, effets, chiffres,
+// bandeaux, statistiques du joueur). Séparé des règles pour que les invités
+// d'une partie entre amis puissent rejouer les mêmes effets chez eux
+// (chacun avec SON personnage : game.player). Voir netgame.js.
+// ---------------------------------------------------------------------
+
+// Note un événement pour les invités (seulement sur le téléphone hôte)
+function emit(ev) {
+  if (game.emit) game.emit(ev);
+}
+
+// Sons, vibrations, douilles d'un personnage ('fire', 'throw', 'reload'…)
+export function presentFighterEvent(f, name) {
     const vol = hearingVolume(f);
     if (name === 'fire') {
       const def = f.weapon.def;
@@ -173,8 +171,50 @@ export const game = {
     } else if (f === game.player) {
       game.sound.play(name);                     // 'reload', 'switch', 'empty'
     }
-  },
-};
+}
+
+// Quelqu'un est touché : flash blanc, chiffres, marqueurs, sons
+export function presentDamage(target, attacker, total, absorbed, killed) {
+  target.hitFlash = 0.12;
+  if (attacker === game.player && target !== game.player) addFloater(target, total, absorbed);
+  if (target === game.player && attacker && attacker !== target) {
+    game.hurtMarks.push({ angle: Math.atan2(attacker.cy - target.cy, attacker.cx - target.cx),
+                          time: game.time });
+    if (game.hurtMarks.length > 6) game.hurtMarks.shift();
+  }
+  if (attacker === game.player && target !== game.player) {
+    game.hitMarks.push({ x: target.cx, y: target.cy, life: CONFIG.feel.hitMarkerTime, kill: killed });
+    if (game.hitMarks.length > 6) game.hitMarks.shift();
+  }
+  if (target === game.player) {
+    game.sound.play('hurt');
+    game.vibrate(CONFIG.feedback.vibrateOnHit);
+    game.addShake(CONFIG.feel.shakeHurt);
+  } else if (attacker === game.player) {
+    game.sound.play('hitmark');
+  }
+}
+
+// Explosion : onde de choc, flammes, éclats, fumée, tremblement d'écran
+export function presentExplosion(x, y, R) {
+  const fx = game.effects;
+  fx.blast(x, y, R);
+  fx.sparks(x, y, '#ffd43b', 16, BLAST_FIRE);
+  fx.sparks(x, y, '#ff6b2b', 16, BLAST_FLAME);
+  fx.sparks(x, y, '#495057', 8, BLAST_DEBRIS);
+  for (let i = 0; i < 8; i++) fx.smoke(x, y, 12);
+  const vol = hearingVolumeAt(x, y);
+  game.sound.play('explosion', vol);
+  game.addShake(CONFIG.feel.shakeExplosion * vol);
+}
+
+// Objet ramassé
+export function presentPickup(f) {
+  if (f === game.player) {
+    game.sound.play('pickup');
+    game.stats.pickups++;
+  }
+}
 
 // Réglages d'effets réutilisés (évite de recréer ces objets à chaque fois)
 const BLAST_FIRE = { speed: 420, size: 6 };
@@ -226,40 +266,44 @@ export function teamScores(fighters) {
 // ---------------------------------------------------------------------
 // Début et fin de partie
 // ---------------------------------------------------------------------
-// cosmetics = { color, pattern, trail } : apparence choisie par le joueur
-export function startMatch(settings, cosmetics = null) {
-  game.settings = settings;
-  game.map = new GameMap(MAPS[settings.map]);
-  game.mode = settings.mode;
-  game.teams = settings.mode === 'teams';
-  game.hill = settings.mode === 'hill' ? game.map.hill : null;
-  game.hillOwner = null;
-  game.hillContested = false;
-  game.stats = { kills: 0, deaths: 0, streak: 0, bestStreak: 0, weaponKills: {},
-                 explosiveKills: 0, airKills: 0, pickups: 0, hillTime: 0 };
-  game.player = new Fighter({ name: CONFIG.player.name,
+// cosmetics = { color, pattern, trail… } : apparence choisie par le joueur
+// guests (entre amis) = [{ peer, name, cosmetics }] : les invités, joués à distance
+export function startMatch(settings, cosmetics = null, guests = [], playerName = CONFIG.player.name) {
+  prepareMatch(settings);
+  game.player = new Fighter({ name: playerName,
                               color: cosmetics ? cosmetics.color : CONFIG.player.color, team: 0 });
-  if (cosmetics) {
-    game.player.pattern = cosmetics.pattern;
-    game.player.trail = cosmetics.trail;
-    game.player.look = lookFromCosmetics(cosmetics);
-  }
+  dress(game.player, cosmetics);
   game.fighters = [game.player];
   game.bots = [];
+  for (const g of guests) {
+    const f = new Fighter({ name: g.name, color: g.cosmetics.color, team: 0 });
+    dress(f, g.cosmetics);
+    f.peer = g.peer;                               // numéro de son téléphone (serveur.py)
+    f.remoteHuman = true;                          // (son nom s'affiche au-dessus de lui)
+    f.remoteCmd = { moveX: 0, up: false, aimX: 1, aimY: 0, fire: false,
+                    switchWeapon: false, reload: false, throwGrenade: false };
+    game.fighters.push(f);
+  }
   const B = CONFIG.bots, T = CONFIG.teams;
   const skill = CONFIG.difficulties[settings.difficulty];
   // Personnalités réparties à tour de rôle (en partant d'une au hasard)
   const persKeys = Object.keys(CONFIG.personalities);
   const persStart = Math.floor(Math.random() * persKeys.length);
   // En équipes : l'équipe du joueur a la moitié (arrondie en dessous) des places
-  const total = settings.bots + 1;
+  // (entre amis : les humains sont répartis un par un, puis les bots équilibrent)
+  const humans = game.fighters.length;
+  game.fighters.forEach((f, i) => { f.team = game.teams && guests.length ? i % 2 : 0; });
+  const total = settings.bots + humans;
   const team0Size = Math.floor(total / 2);
   for (let i = 0; i < settings.bots; i++) {
-    const team = game.teams && i + 1 >= team0Size ? 1 : 0;
+    let team = game.teams && i + 1 >= team0Size ? 1 : 0;
+    if (game.teams && guests.length) {
+      const n0 = game.fighters.filter((o) => o.team === 0).length;
+      team = n0 < game.fighters.length - n0 ? 0 : 1;
+    }
     const shades = T.shades[team];
     const color = game.teams ? shades[i % shades.length] : B.colors[i % B.colors.length];
     const f = new Fighter({ name: B.names[i % B.names.length], color, isBot: true, team });
-    if (game.teams) f.labelColor = T.colors[team];
     const pers = CONFIG.personalities[persKeys[(persStart + i) % persKeys.length]];
     f.secondaryId = pers.secondary;
     f.tag = pers.tag;
@@ -270,14 +314,69 @@ export function startMatch(settings, cosmetics = null) {
   // Chacun sur un point d'apparition différent
   const spawns = [...game.map.spawns].sort(() => Math.random() - 0.5);
   game.fighters.forEach((f, i) => {
+    f.nid = i;                                     // numéro du personnage (réseau)
+    if (game.teams) f.labelColor = T.colors[f.team];
     f.respawn(spawns[i % spawns.length]);
     f.protectTimer = 0;
     f.hillPoints = 0;
   });
+}
+
+// Ce qui est commun à toutes les parties (solo, hôte, invité)
+function prepareMatch(settings) {
+  game.settings = settings;
+  game.map = new GameMap(MAPS[settings.map]);
+  game.mode = settings.mode;
+  game.teams = settings.mode === 'teams';
+  game.hill = settings.mode === 'hill' ? game.map.hill : null;
+  game.hillOwner = null;
+  game.hillContested = false;
+  game.stats = { kills: 0, deaths: 0, streak: 0, bestStreak: 0, weaponKills: {},
+                 explosiveKills: 0, airKills: 0, pickups: 0, hillTime: 0 };
   clearMatch();
   game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
   game.time = 0;
   game.timeLeft = CONFIG.rules.matchDuration;
+}
+
+// Applique l'apparence choisie (écran Style) à un personnage
+function dress(f, c) {
+  if (!c) return;
+  f.pattern = c.pattern;
+  f.trail = c.trail;
+  f.look = lookFromCosmetics(c);
+}
+
+// Description des personnages, envoyée aux invités au début de la partie
+export function rosterOf() {
+  return game.fighters.map((f) => ({
+    nid: f.nid, peer: f.peer ?? (f === game.player ? 0 : null), name: f.name, color: f.color,
+    team: f.team, isBot: f.isBot, tag: f.tag || null, labelColor: f.labelColor || null,
+    pattern: f.pattern || null, trail: f.trail || null, look: f.look, secondaryId: f.secondaryId || null,
+  }));
+}
+
+// Chez un invité : recrée la partie décrite par l'hôte (sans bots ni règles :
+// tout l'état arrive ensuite par le réseau, voir netgame.js)
+export function startGuestMatch(settings, roster, myPeer) {
+  prepareMatch(settings);
+  game.bots = [];
+  game.fighters = roster.map((r) => {
+    const f = new Fighter({ name: r.name, color: r.color, isBot: r.isBot, team: r.team });
+    Object.assign(f, { nid: r.nid, peer: r.peer, tag: r.tag, labelColor: r.labelColor,
+                       pattern: r.pattern, trail: r.trail, look: r.look, hillPoints: 0 });
+    if (r.secondaryId) { f.secondaryId = r.secondaryId; f.resetWeapons(); }
+    return f;
+  });
+  game.player = game.fighters.find((f) => f.peer === myPeer) || game.fighters[0];
+  for (const f of game.fighters) f.remoteHuman = !f.isBot && f !== game.player;
+}
+
+// Un invité a quitté la partie : son personnage disparaît
+export function removeFighter(f) {
+  f.alive = false;                                 // (les bots arrêtent de le viser)
+  game.fighters = game.fighters.filter((o) => o !== f);
+  if (game.hillOwner === f) game.hillOwner = null;
 }
 
 // Vide tout ce qui est temporaire (balles, effets…)
@@ -321,13 +420,22 @@ function killFighter(victim, killer) {
   victim.deaths++;
   victim.jetting = false;
   victim.respawnTimer = CONFIG.rules.respawnDelay;
+  if (killer && killer !== victim) killer.kills++;
+  const weapon = victim.lastHitWeapon || (killer ? killer.weapon.def.id : null);
+  presentKill(victim, killer, weapon);
+  emit(['kill', victim.nid, killer ? killer.nid : -1, weapon]);
+}
+
+// Élimination : éclats, ralenti, statistiques du joueur, bandeau, fil, sons
+export function presentKill(victim, killer, weapon) {
   // Le personnage éclate en morceaux de sa couleur + un peu de fumée
   const fx = game.effects;
   fx.sparks(victim.cx, victim.cy, victim.color, 22, DEATH_BITS);
   fx.sparks(victim.cx, victim.cy, '#ffffff', 6, DEATH_FLASH);
   for (let i = 0; i < 3; i++) fx.smoke(victim.cx, victim.cy, 10);
   if (victim === game.player) game.addShake(CONFIG.feel.shakeDeath);
-  if (killer === game.player && victim !== game.player) game.slowmo = CONFIG.feel.slowmoDuration;
+  // (ralenti seulement en solo : entre amis, il ralentirait tout le monde)
+  if (killer === game.player && victim !== game.player && !game.net) game.slowmo = CONFIG.feel.slowmoDuration;
 
   // Statistiques du joueur (missions, XP, écran Statistiques)
   const st = game.stats;
@@ -336,7 +444,6 @@ function killFighter(victim, killer) {
     st.streak = 0;
   }
   if (killer === game.player && victim !== game.player) {
-    const weapon = victim.lastHitWeapon || game.player.weapon.def.id;
     st.kills++;
     st.streak++;
     st.bestStreak = Math.max(st.bestStreak, st.streak);
@@ -346,7 +453,6 @@ function killFighter(victim, killer) {
   }
 
   if (killer && killer !== victim) {
-    killer.kills++;
     if (killer === game.player) {
       // Éliminations enchaînées en moins de 4 s → bandeau plus fort
       killer.streak = game.time - (killer.lastKillTime ?? -99) < 4 ? (killer.streak || 1) + 1 : 1;
@@ -402,6 +508,8 @@ export function updateMatch(dt, playerCmd) {
   cmds.clear();
   cmds.set(p, playerCmd);
   for (const b of game.bots) cmds.set(b.fighter, b.brain.think(dt, game));
+  // (entre amis : les invités envoient leur commande par le réseau, voir netgame.js)
+  for (const f of game.fighters) if (f.remoteCmd) cmds.set(f, f.remoteCmd);
 
   // 2. Les personnages appliquent leur commande
   for (const f of game.fighters) {
@@ -432,9 +540,20 @@ export function updateMatch(dt, playerCmd) {
   game.bullets = game.bullets.filter((b) => !b.dead);
   game.effects.update(dt);
 
+  // Les actions "une fois" des invités (changer d'arme, recharger, grenade) sont faites
+  for (const f of game.fighters) {
+    if (f.remoteCmd) f.remoteCmd.switchWeapon = f.remoteCmd.reload = f.remoteCmd.throwGrenade = false;
+  }
+
   // Roi de la colline : celui qui est SEUL dans la zone marque des points
   if (game.hill && updateHill(dt)) return true;
 
+  updateVisuals(dt);
+  return false;
+}
+
+// Effets qui ne changent rien aux règles (aussi utilisés chez les invités)
+export function updateVisuals(dt) {
   // Fumée qui s'échappe des jetpacks (traînée personnalisée pour le joueur)
   for (const f of game.fighters) {
     if (f.alive && f.jetting && Math.random() < 0.45) {
@@ -451,7 +570,6 @@ export function updateMatch(dt, playerCmd) {
   game.floaters = game.floaters.filter((fl) => fl.life > 0);
   for (const hm of game.hitMarks) hm.life -= dt;
   game.hitMarks = game.hitMarks.filter((hm) => hm.life > 0);
-  return false;
 }
 
 // Renvoie true si quelqu'un atteint le score à atteindre

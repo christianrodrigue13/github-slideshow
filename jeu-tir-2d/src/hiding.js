@@ -26,13 +26,20 @@ export function hideZoneOf(map, f) {
 
 // À chaque image : qui est caché ? (et le feuillage bouge quand on le traverse)
 export function updateHiding(game, dt) {
-  for (const z of game.map.hides) z.rustle = Math.max(0, z.rustle - dt * 1.5);
   for (const f of game.fighters) {
     f.hideZone = f.alive ? hideZoneOf(game.map, f) : null;
     f.hidden = !!f.hideZone && f.protectTimer <= 0 &&
                game.time - f.lastShotTime > H.revealTime &&
                game.time - f.lastAttackTime > H.revealTime;
-    if (f.hideZone && (Math.abs(f.vx) > 40 || Math.abs(f.vy) > 80)) {
+  }
+  updateRustle(game, dt);
+}
+
+// Le feuillage bouge quand quelqu'un le traverse (aussi chez les invités)
+export function updateRustle(game, dt) {
+  for (const z of game.map.hides) z.rustle = Math.max(0, z.rustle - dt * 1.5);
+  for (const f of game.fighters) {
+    if (f.alive && f.hideZone && (Math.abs(f.vx) > 40 || Math.abs(f.vy) > 80)) {
       f.hideZone.rustle = Math.min(1, f.hideZone.rustle + dt * 4);
     }
   }

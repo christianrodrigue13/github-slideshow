@@ -329,6 +329,14 @@ export const CONFIG = {
     botHideDistance: 700,    // cachette cherchée jusqu'à cette distance
   },
 
+  // --- Jeu entre amis (même Wi-Fi, voir netgame.js et serveur.py) ---
+  network: {
+    sendEvery: 2,            // un message toutes les 2 mises à jour (= 30 par seconde)
+    snapDistance: 150,       // écart de position au-delà duquel on se recale d'un coup
+    correction: 10,          // vitesse du recalage doux de son propre personnage
+    silenceMs: 500,          // un invité silencieux depuis 0,5 s s'arrête (veille, Wi-Fi coupé)
+  },
+
   // --- Minicarte ---
   minimap: {
     radarTime: 2.5,          // un ennemi apparaît sur la minicarte s'il a tiré récemment
