@@ -12,9 +12,10 @@ import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSight
          playerWon } from './match.js';
 import { loadProfile, saveProfile, finishMatch, cosmetic, isUnlocked, COSMETIC_TYPES } from './progress.js';
 import { initBackup, openBackup, backupIsOpen } from './backup.js';
+import { loadJournal, journalStart, journalTouch, journalEnd, clearJournal } from './journal.js';
 import { loadOptions, cycleOption, aimAssistStrength, aimSpeed } from './options.js';
 import { drawHUD, drawTouchControls, drawPauseButton } from './hud.js';
-import { drawMenu, menuButtons, hitMenu } from './menus.js';
+import { drawMenu, menuButtons, hitMenu, titleRect } from './menus.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -54,9 +55,13 @@ function applyOptions() {
 const profile = loadProfile();
 initBackup();
 
+// Journal local anonyme des parties (écran caché : appui long sur le titre)
+const journal = loadJournal();
+let journalEntry = null;        // la partie en cours dans le journal
+
 // Ce dont les écrans de menu ont besoin
 const menuCtx = {
-  game, settings, options, profile,
+  game, settings, options, profile, journal,
   summary: null,                        // résumé d'XP de la dernière partie
   overTime: 0,                          // temps depuis la fin (animation de la barre d'XP)
   stylePreview: { ...profile.cosmetics },   // choix affiché sur l'écran Style
@@ -138,7 +143,10 @@ function beginMatch() {
   // Une entrée dans l'historique : le bouton "retour" du téléphone mettra
   // le jeu en pause au lieu de quitter la page (voir plus bas)
   try { if (!history.state || !history.state.jeu) history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
+  // (relancer une partie en cours = l'abandonner)
+  journalEnd(journal, journalEntry, game.time, 'abandonnée');
   startMatch(settings, playerCosmetics());
+  journalEntry = journalStart(journal, settings);
   menuCtx.summary = null;
   updateCamera(0, true);
   setState('playing');
@@ -164,6 +172,17 @@ function update(dt) {
   if (state !== 'playing') {
     if (state === 'over') menuCtx.overTime += dt;
     if (backupIsOpen()) { input.taps.length = 0; return; }   // fenêtre de sauvegarde ouverte
+    // Appui long (≈ 1 s) sur le titre de l'accueil → écran caché du journal
+    if (state === 'menu' && input.hold && performance.now() - input.hold.time > 900) {
+      const r = titleRect(view), h = input.hold;
+      input.hold = null;
+      if (h.x >= r.x && h.x <= r.x + r.w && h.y >= r.y && h.y <= r.y + r.h) {
+        input.taps.length = 0;
+        optionsReturn = 'menu';
+        setState('journal');
+        return;
+      }
+    }
     handleMenuTaps();
     // Échap / bouton pause : reprend depuis la pause, quitte les sous-écrans
     if (input.takePause()) {
@@ -194,10 +213,11 @@ function update(dt) {
 }
 
 // Sous-écrans ouverts depuis l'accueil ou la pause (bouton Retour)
-const SUB_SCREENS = ['options', 'missions', 'style', 'stats'];
+const SUB_SCREENS = ['options', 'missions', 'style', 'stats', 'journal'];
 
 // Partie terminée normalement : XP, missions, statistiques
 function endMatch() {
+  journalEnd(journal, journalEntry, game.time, 'terminée');
   menuCtx.summary = finishMatch(profile, {
     won: playerWon(), mode: game.mode, duration: game.time,
     hillPoints: game.player.hillPoints, stats: game.stats,
@@ -238,6 +258,8 @@ function handleMenuTaps() {
       // (en quittant le Style, l'aperçu revient à ce qui est vraiment équipé)
       menuCtx.stylePreview = { ...profile.cosmetics };
       setState(optionsReturn);
+    } else if (id === 'journal-clear') {
+      if (window.confirm('Effacer tout le journal des parties ?')) clearJournal(journal);
     } else if (id === 'export' || id === 'import') {
       openBackup(id);
     } else if (id && id.startsWith('cos:')) {
@@ -275,6 +297,7 @@ function changeSetting(id) {
 }
 
 function goToMainMenu() {
+  journalEnd(journal, journalEntry, game.time, 'abandonnée');   // (sans effet si déjà terminée)
   resetMatch();
   view.zoom = 1;
   view.scale = view.baseScale;
@@ -512,8 +535,13 @@ window.addEventListener('popstate', () => {
 });
 
 // Si on quitte l'application pendant la partie → pause
+// (et on note la durée jouée dans le journal, au cas où la page serait fermée)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'playing') setState('paused');
+  if (document.hidden && game.player) journalTouch(journal, journalEntry, game.time);
+});
+window.addEventListener('pagehide', () => {
+  if (game.player) journalTouch(journal, journalEntry, game.time);
 });
 
 // Petit accès de débogage pour les tests automatiques

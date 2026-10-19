@@ -1,10 +1,11 @@
-# Jet Arena — prototype de jeu de tir 2D
+# Jet Arena — prototype de jeu de tir 2D (v0.2)
 
 *(« Jet Arena » est un nom provisoire.)*
 
 Un prototype jouable **dans le navigateur du téléphone** : un personnage avec
 jetpack, du tir dans toutes les directions, des parties de 3 minutes contre
-des bots, sur 3 cartes, en chacun pour soi ou en équipes. Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
+des bots, sur 3 cartes, en chacun pour soi, en équipes ou en « Roi de la
+colline », avec de la progression (niveaux, missions du jour, styles). Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
 amusant avant d'investir dans des serveurs ou l'App Store.
 
 Les graphismes et les sons sont **provisoires** : des formes colorées et des
@@ -33,23 +34,23 @@ Ouvre un terminal **dans le dossier `jeu-tir-2d`**, puis tape **une** de ces
 commandes :
 
 ```bash
-python3 -m http.server 3200 --bind 0.0.0.0
+python3 -m http.server 3400 --bind 0.0.0.0
 ```
 
 ou, si tu as Node.js installé :
 
 ```bash
-npx serve -l 3200
+npx serve -l 3400
 ```
 
 (Sur Windows, si `python3` n'est pas reconnu, essaie `python` ou `py` à la place.)
 
 Laisse ce terminal ouvert pendant que tu joues. Pour arrêter : `Ctrl + C`.
 
-Le port **3200** a été choisi pour ne pas gêner tes autres projets (3000, 3001
-et 3100).
+Le port **3400** a été choisi pour ne pas gêner tes autres projets (3000, 3001,
+3100, 3200 et 3300).
 
-Sur l'ordinateur lui-même, tu peux tester en ouvrant : <http://localhost:3200>
+Sur l'ordinateur lui-même, tu peux tester en ouvrant : <http://localhost:3400>
 
 ### Étape 3 — Trouver l'adresse IP de ton ordinateur
 
@@ -67,12 +68,12 @@ C'est l'adresse de ton ordinateur sur ton réseau Wi-Fi, du genre `192.168.1.23`
 
 1. Le téléphone doit être sur **le même réseau Wi-Fi** que l'ordinateur.
 2. Ouvre Chrome (Android) ou Safari (iPhone) et tape :
-   `http://ADRESSE-IP:3200` — par exemple `http://192.168.1.23:3200`
+   `http://ADRESSE-IP:3400` — par exemple `http://192.168.1.23:3400`
 3. Tourne le téléphone **en paysage** et touche **JOUER**.
 
 **Ça ne charge pas ?**
 - Vérifie que le terminal du serveur est toujours ouvert.
-- Vérifie que tu as bien écrit `http://` (pas `https://`) et `:3200`.
+- Vérifie que tu as bien écrit `http://` (pas `https://`) et `:3400`.
 - Le pare-feu de l'ordinateur peut bloquer : sur Windows, accepte la fenêtre
   « Autoriser l'accès » qui s'affiche au lancement de Python (réseau privé).
 - Certains Wi-Fi publics ou « invités » empêchent les appareils de se voir :
@@ -127,15 +128,17 @@ Le jeu s'ouvrira alors en plein écran, sans la barre d'adresse.
 
 | Geste | Action |
 |---|---|
-| **Pouce gauche** posé n'importe où sur la moitié gauche | joystick de déplacement |
+| **Pouce gauche** sur la moitié gauche | joystick de déplacement |
 | Pousser le joystick gauche **vers le haut** | sauter (au sol), puis **jetpack** en maintenant |
-| **Pouce droit** posé n'importe où sur la moitié droite | joystick de visée |
+| **Pouce droit** sur la moitié droite | joystick de visée |
 | Pousser le joystick droit **assez loin** | **tirer** (tant qu'on pousse) |
 | Bouton **⇄** | changer d'arme |
 | Bouton **R** | recharger |
 | Bouton **II** (en haut à droite) | pause |
+| Bouton **retour** du téléphone | met en pause (ne quitte pas le jeu) |
 
-Les joysticks apparaissent là où tu poses le doigt.
+Tout se règle dans **Options** (menu principal ou pause) : mode gaucher (côtés
+inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir automatique.
 
 ### Sur ordinateur
 
@@ -147,129 +150,201 @@ Les joysticks apparaissent là où tu poses le doigt.
 | **Clic gauche** maintenu | tirer |
 | **R** ou clic droit | recharger |
 | **E**, **1**, **2** ou molette | changer d'arme |
-| **Échap** ou **P** | pause |
+| **Échap** ou **P** | pause / retour |
 
 ---
 
-## 4. Le menu et les règles
+## 4. Le menu principal
 
-### Le menu d'accueil
-Touche **◀ / ▶** (ou la valeur elle-même) pour changer chaque réglage, puis **JOUER**.
-Tes choix sont mémorisés pour la prochaine fois.
-
-| Réglage | Choix |
+| Bouton | Ce qu'il fait |
 |---|---|
-| **Carte** | Entrepôt (nuit), Canyon (coucher de soleil, grands gouffres), Tours (verticale, beaucoup de vol) |
-| **Mode** | Chacun pour soi, ou Équipes (Bleus contre Rouges, toi chez les Bleus) |
-| **Difficulté** | Facile, Normal, Difficile (précision et réflexes des bots, dégâts qu'ils font) |
+| **Carte** | Entrepôt (nuit), Canyon (grands gouffres), Tours (verticale, beaucoup de vol) |
+| **Mode** | Chacun pour soi · Équipes (Bleus contre Rouges, 2 c. 2 ou 3 c. 3 selon le nombre de bots) · Roi de la colline |
+| **Difficulté** | Facile, Normal, Difficile : précision, réflexes et agressivité des bots |
 | **Bots** | de 3 à 7 |
+| **Missions** | les 3 missions du jour et leur avancement |
+| **Style** | couleurs, motifs et traînées de jetpack débloqués |
+| **Stats** | tes statistiques + la sauvegarde de secours |
+| **Options** | tous les réglages (voir plus bas) |
 
-### Les règles
-- **Chacun pour soi** : tout le monde se tire dessus. **Équipes** : les balles
-  traversent tes coéquipiers (pas de tir ami), on gagne au total d'éliminations de l'équipe.
-- 100 points de vie. Le jetpack consomme du carburant, qui se recharge **au sol**.
-- Tomber dans un trou = mort. Si quelqu'un t'a touché juste avant, c'est lui
-  qui marque le point. Ta propre grenade peut te blesser (à moitié).
-- Après une mort, on réapparaît au bout de **3 secondes**, avec un court moment
-  d'invincibilité (le personnage clignote ; tirer l'annule).
-- Une partie dure **3 minutes**.
+En haut à gauche : ton **niveau** et ta barre d'XP. Tous tes choix sont mémorisés.
 
-### Armes et objets
+---
+
+## 5. Les règles
+
+- **Chacun pour soi** : tout le monde se tire dessus. Classement aux éliminations.
+- **Équipes** : les balles traversent tes coéquipiers (pas de tir ami) ; l'équipe
+  qui a le plus d'éliminations gagne.
+- **Roi de la colline** : une zone ★ COLLINE est dessinée sur la carte. Celui qui
+  y est **seul** gagne 1 point par seconde. Zone orange = disputée. Le premier à
+  60 points gagne (sinon, le meilleur à la fin des 3 minutes).
+- 100 PV. Le jetpack consomme du carburant, qui se recharge **au sol**.
+- Tomber dans un trou = mort ; si quelqu'un t'a touché juste avant, c'est lui qui marque.
+- Réapparition au bout de **3 secondes**, avec un court moment d'invincibilité.
+
+### Armes
+
 Tu portes **2 armes** : le **fusil auto** (toujours) et une **arme secondaire**
-(au départ le fusil à pompe). Le bouton **⇄** passe de l'une à l'autre.
+(au départ le fusil à pompe), remplacée en ramassant une **caisse en bois**
+(l'abréviation sur la caisse dit l'arme dedans).
 
-| Arme | En bref |
-|---|---|
-| Fusil auto | rafales rapides, bonne portée |
-| Fusil à pompe | 7 plombs, dévastateur de près |
-| Sniper | 70 dégâts par tir, très longue portée, laser de visée, la caméra dézoome |
-| Lance-grenades | grenades qui rebondissent et explosent (dégâts de zone + souffle), trajectoire affichée |
+| Arme | Caisse | En bref |
+|---|---|---|
+| Fusil auto | — | rafales rapides, bonne portée |
+| Pistolet-mitrailleur | PM | tire très vite, faibles dégâts, courte portée |
+| Fusil à pompe | POM | 7 plombs, dévastateur de près |
+| Fusil de précision | PRÉ | 70 dégâts, très longue portée, laser rouge, la caméra dézoome |
+| Lance-roquettes | ROQ | explose à l'impact, dégâts de zone, forte projection |
+| Grenades | GRE | lancer en arc (trajectoire affichée), explosion après 1,8 s |
 
-À ramasser en passant dessus (ils réapparaissent après quelques secondes) :
-- **Caisse en bois** (lettre = l'arme dedans) : remplace ton arme secondaire.
+Les **munitions sont limitées** : chiffre en gros = chargeur, en petit = réserve.
+Une arme vide passe automatiquement à l'autre.
+
+### Objets (réapparaissent au même endroit après quelques secondes)
+
 - **Trousse blanche à croix rouge** : +50 PV.
-- **Écusson bleu** : bouclier de 50 points qui encaisse les dégâts avant ta vie
-  (bulle bleue autour du personnage).
+- **Écusson bleu** : bouclier de 50 points (bulle bleue autour du personnage).
+- **Caisse verte avec cartouches** : remplit la réserve de munitions des 2 armes.
+- **Caisse en bois** : une arme.
 
-### Ce qui aide à jouer
-- **Aide à la visée** (téléphone) : si un ennemi est presque dans ton viseur, la visée glisse un peu vers lui.
-- **Pointillés de visée** quand ton pouce droit vise.
-- **Chiffres jaunes** au-dessus des ennemis touchés (bleus si leur bouclier a encaissé).
-- **Flèches rouges** autour de toi : d'où viennent les tirs que tu reçois.
-- **Minicarte** en haut à droite : les ennemis n'y apparaissent (en rouge) que s'ils viennent de tirer.
+### Les bots
+Chaque bot a une **personnalité**, indiquée par un symbole devant son nom :
+**⚔ Agressif** (fonce, fusil à pompe), **◎ Tireur** (garde ses distances, fusil de
+précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé).
 
 ---
 
-## 5. Changer l'équilibrage (vitesse, dégâts, bots…)
+## 6. Ce qui aide à jouer (sensations)
 
-**Tout se règle dans un seul fichier : `src/config.js`.**
-Chaque valeur est commentée en français. Change un nombre, enregistre,
-puis recharge la page du jeu.
+- **Aide à la visée** (téléphone) : la visée glisse un peu vers un ennemi proche du viseur.
+- **Tir automatique** (option) : tu tires seul dès qu'un ennemi est dans le viseur.
+- **Ligne de visée** en pointillés quand ton pouce vise.
+- **Croix de touche** blanche (rouge si élimination), **chiffres de dégâts**.
+- **Ralenti très court** quand tu élimines quelqu'un.
+- **Flèches rouges** autour de toi : d'où viennent les tirs reçus.
+- **Minicarte** : les ennemis n'y apparaissent (en rouge) que s'ils viennent de tirer.
+- Tremblement d'écran, flash au canon, douilles, étincelles, sons qui varient légèrement, vibrations.
 
-Exemples :
+---
 
-| Je veux… | Je modifie dans `config.js` |
+## 7. Options
+
+| Option | Choix |
 |---|---|
-| des bots plus ou moins forts | `difficulties` : `aimError` (plus grand = plus maladroits), `reactionTime`, `damage` |
-| changer le nombre de bots par défaut | `bots.count` (et dans le menu) |
-| voler plus longtemps | `jetpack.maxFuel` ou `jetpack.burnPerSecond` |
-| un perso plus rapide | `fighter.runSpeed` |
-| sauter plus haut | `fighter.jumpSpeed` |
-| modifier une arme | son bloc dans `weapons` (`damage`, `fireRate`, `magazine`, `range`…) |
-| une explosion plus grosse | `weapons` → `launcher` → `blastRadius` |
-| plus de soin / de bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
-| des objets qui reviennent plus vite | `pickups.healthRespawn`, `shieldRespawn`, `weaponRespawn` |
-| plus ou moins d'aide à la visée | `touch.aimAssist.strength` (0 = aucune) |
-| des parties plus courtes | `rules.matchDuration` (en secondes) |
-| des joysticks plus grands | `touch.stickRadius` |
-| plus / moins de vibrations | `feedback.vibrateOnShoot`, `feedback.vibrateOnHit` (0 = coupé) |
-
-Les **cartes** sont dans `src/map.js` (liste `MAPS`) : chaque carte est une
-liste de rectangles, de points d'apparition et d'emplacements d'objets.
+| Sensibilité visée | Basse / Moyenne / Haute (vitesse à laquelle la visée suit le pouce) |
+| Aide à la visée | Désactivée / Faible / Moyenne |
+| Tir automatique | Non / Oui |
+| Vibrations | Non / Oui (Android ; l'iPhone ne vibre pas dans le navigateur) |
+| Volume | 0 à 100 % |
+| Tremblement écran | Désactivé / Faible / Normal |
+| Mode gaucher | inverse les côtés des joysticks et des boutons |
+| Joysticks | Flottants (apparaissent sous le pouce) ou Fixes (toujours au même endroit) |
 
 ---
 
-## 6. Organisation des fichiers (pour un développeur)
+## 8. Progression (pour revenir jouer)
+
+- **XP** à chaque partie **terminée** : participation, éliminations, victoire,
+  points de colline, missions. Les **niveaux** montent ; l'écran de fin montre
+  la barre qui se remplit et le détail des gains.
+- **Missions du jour** : 3 missions tirées au hasard, nouvelles chaque jour à minuit.
+- **Style** : couleurs, motifs et traînées de jetpack se débloquent avec les
+  niveaux. **Uniquement de l'apparence**, aucun avantage en jeu.
+- **Stats** : parties, victoires, éliminations, morts, ratio, meilleure série,
+  arme préférée, temps de jeu.
+- **Sauvegarde de secours** (écran Stats) : « Exporter » affiche un texte qui
+  contient toute ta progression — copie-le dans tes notes ou un e-mail.
+  « Importer » le restaure (nouveau téléphone, navigateur vidé…).
+
+Tout est enregistré **sur l'appareil** (rien n'est envoyé sur Internet). Attention :
+vider les données du navigateur efface la progression — d'où la sauvegarde de secours.
+
+---
+
+## 9. Journal de bêta (écran caché)
+
+Sur le menu principal, **appuie longuement (1 seconde) sur le titre « JET ARENA »**.
+Tu vois, pour cet appareil : nombre de parties lancées, terminées, abandonnées
+(et le pourcentage), durées moyennes, parties par mode et par carte, et les
+dernières parties. Une partie dont on quitte la page en plein milieu compte comme
+abandonnée. Ces chiffres restent sur le téléphone (rien n'est envoyé) ; le bouton
+« Effacer » remet le journal à zéro.
+
+---
+
+## 10. Changer l'équilibrage
+
+**Tout se règle dans un seul fichier : `src/config.js`**, commenté en français.
+Change un nombre, enregistre, recharge la page.
+
+| Je veux… | Dans `config.js` |
+|---|---|
+| des bots plus ou moins forts | `difficulties` : `aimError`, `reactionTime`, `damage`, `aggression` |
+| changer les caractères des bots | `personalities` (distance préférée, armes, replis…) |
+| modifier une arme | son bloc dans `weapons` (`damage`, `fireRate`, `magazine`, `reserve`…) |
+| plus ou moins de munitions | `reserve` de chaque arme (`Infinity` = illimité) |
+| une explosion plus grosse | `blastRadius` et `knockback` de `rocket` / `grenade` |
+| plus de soin / bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
+| des objets qui reviennent plus vite | `pickups.healthRespawn`, `ammoRespawn`, `weaponRespawn`… |
+| la colline plus rapide | `hill.pointsPerSecond`, `hill.target` |
+| plus ou moins d'XP | `progression.xp`, `levelBase`, `levelStep` |
+| d'autres missions | `progression.missions` |
+| d'autres styles | `cosmetics` (avec le niveau requis) |
+| moins de tremblement / de ralenti | `feel` |
+| les valeurs proposées dans Options | `options` |
+| moins d'effets (téléphone lent) | `effects.maxParticles` |
+| des parties plus courtes | `rules.matchDuration` (secondes) |
+
+Les **cartes** sont dans `src/map.js` (liste `MAPS`) : rectangles, points
+d'apparition, objets, zone de colline.
+
+---
+
+## 11. Organisation des fichiers (pour un développeur)
 
 ```
 jeu-tir-2d/
-├── index.html            page unique, balises anti-zoom, manifest
+├── index.html            page unique, balises anti-zoom, manifest, fenêtre de sauvegarde
 ├── style.css             plein écran, message « tourne ton téléphone »
 ├── manifest.webmanifest  installation sur l'écran d'accueil
 ├── icons/                icônes de l'application
 └── src/
-    ├── main.js     boucle à pas fixe (60 mises à jour/s), caméra, règles, menus
-    ├── config.js   TOUTES les valeurs d'équilibrage
-    ├── input.js    clavier / souris / tactile → une « commande » neutre
-    ├── player.js   le personnage (physique, jetpack, armes) — joueur ET bots
-    ├── bot.js      IA : fabrique la même commande qu'un joueur
-    ├── weapon.js   chargeur, cadence, rechargement
-    ├── bullet.js   balles (sans traversée des murs), grenades, particules, explosions
-    ├── pickup.js   objets à ramasser (soin, bouclier, caisses d'armes)
-    ├── map.js      les 3 cartes, leurs ambiances, collisions, lancer de rayon
-    ├── hud.js      interface, joysticks, menus
-    └── audio.js    sons Web Audio générés + vibrations
+    ├── main.js      boucle à pas fixe (60/s), caméra, dessin, enchaînement des écrans
+    ├── match.js     règles : dégâts, explosions, éliminations, chrono, colline, stats de partie
+    ├── config.js    TOUTES les valeurs d'équilibrage
+    ├── input.js     clavier / souris / tactile → une « commande » neutre
+    ├── player.js    le personnage (physique, jetpack, armes, cosmétiques) — joueur ET bots
+    ├── bot.js       IA (personnalités) : fabrique la même commande qu'un joueur
+    ├── weapon.js    chargeur, réserve, cadence, rechargement
+    ├── bullet.js    projectiles : balles, roquettes, grenades
+    ├── pickup.js    objets à ramasser
+    ├── map.js       les 3 cartes, ambiances, collisions
+    ├── effects.js   particules réutilisées (aucune création pendant le jeu), explosions
+    ├── hud.js       interface pendant la partie, joysticks, minicarte
+    ├── menus.js     tous les écrans de menu
+    ├── ui.js        petits outils de dessin partagés
+    ├── options.js   options du joueur
+    ├── progress.js  XP, niveaux, missions du jour, cosmétiques, statistiques
+    ├── journal.js   journal local anonyme des parties
+    ├── backup.js    fenêtre de sauvegarde de secours
+    ├── save.js      lecture/écriture protégées sur l'appareil (localStorage)
+    └── audio.js     sons Web Audio générés + vibrations
 ```
 
-**Préparation du multijoueur** : le personnage (`player.js`) ne lit jamais le
-clavier ni l'écran. Il reçoit une « commande » `{ moveX, up, aimX, aimY, fire,
-switchWeapon, reload }`, fabriquée par `input.js` pour le joueur et par
-`bot.js` pour les bots. En ligne, cette même commande pourra être envoyée au
-serveur. La logique tourne à pas de temps fixe (1/60 s), ce qui donne le même
-comportement sur tous les appareils.
+**Préparation du multijoueur** : le personnage ne lit jamais l'écran ni le
+clavier ; il reçoit une commande `{ moveX, up, aimX, aimY, fire, switchWeapon,
+reload }` venant de `input.js` (joueur) ou `bot.js` (bots). La logique tourne à
+pas fixe (1/60 s), identique sur tous les appareils.
 
-Aucune dépendance, aucune installation : du HTML, du CSS et du JavaScript
-(modules ES). Il faut juste un serveur web, parce que les navigateurs refusent
-de charger les modules JavaScript depuis un fichier ouvert en double-cliquant
-(`file://`).
+Aucune dépendance, aucune installation ; il faut juste un serveur web (les
+navigateurs refusent les modules JavaScript ouverts en double-cliquant).
 
-### Limites connues du prototype
-
-- **iPhone** : pas de vibration (Safari ne la permet pas) ni de vrai plein
-  écran dans le navigateur. Passe par « Sur l'écran d'accueil » pour jouer sans
-  la barre d'adresse.
+### Limites connues
+- **iPhone** : pas de vibration ni de vrai plein écran dans le navigateur
+  (passer par « Sur l'écran d'accueil »). Le geste de bord d'écran d'iOS ne peut
+  pas être bloqué par une page web.
 - Le son ne démarre qu'après le premier toucher (règle des navigateurs).
-- Munitions de réserve illimitées : seul le chargeur compte.
 - Pas d'arme au corps à corps.
-- L'IA des bots est simple : sur des cartes nouvelles, ils peuvent parfois
-  hésiter devant un obstacle compliqué.
+- L'IA des bots reste simple : sur un parcours compliqué, un bot peut hésiter
+  un moment ou, rarement, tomber dans un gouffre.

@@ -12,6 +12,7 @@ import { unit, font, bar, roundedPath, formatTime } from './ui.js';
 import { ranking, teamScores } from './match.js';
 import { OPTION_ROWS } from './options.js';
 import { Fighter } from './player.js';
+import { journalSummary } from './journal.js';
 import { levelInfo, missionDef, missionText, timeUntilTomorrow, COSMETIC_TYPES,
          cosmetic, isUnlocked, favoriteWeapon } from './progress.js';
 
@@ -122,6 +123,13 @@ export function menuButtons(state, view, m) {
     return list;
   }
 
+  if (state === 'journal') {
+    const w3 = Math.min(170 * u, (view.w - 50) / 2), y = view.h - bh - 10 * u;
+    list.push({ id: 'journal-clear', label: 'Effacer', x: view.w / 2 - w3 - 6, y, w: w3, h: bh });
+    list.push({ id: 'back', label: 'Retour', x: view.w / 2 + 6, y, w: w3, h: bh, kind: 'primary' });
+    return list;
+  }
+
   if (state === 'stats') {
     const w3 = Math.min(150 * u, (view.w - 60) / 3), y = view.h - bh - 12 * u;
     const x3 = view.w / 2 - (w3 * 3 + 16) / 2;
@@ -221,6 +229,7 @@ export function drawMenu(ctx, state, view, m) {
   if (state === 'missions') drawMissions(ctx, view, m.profile, u);
   if (state === 'style') drawStyle(ctx, view, m, u);
   if (state === 'stats') drawStats(ctx, view, m.profile, u);
+  if (state === 'journal') drawJournal(ctx, view, m.journal, u);
 
   if (state === 'options') {
     ctx.fillStyle = '#fff';
@@ -480,6 +489,64 @@ function drawXpPanel(ctx, view, m, u, x, y) {
     ctx.fillStyle = '#ffe066';
     ctx.fillText(val, x + w - 12 * u, ly);
     ly += 16 * u;
+  }
+  ctx.textAlign = 'center';
+}
+
+// Écran caché (appui long sur le titre) : le journal local des parties
+function drawJournal(ctx, view, journal, u) {
+  const J = journalSummary(journal);
+  const cx = view.w / 2;
+  const dur = (sec) => `${Math.floor(sec / 60)} min ${String(Math.round(sec % 60)).padStart(2, '0')}`;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(20 * u);
+  ctx.fillText('Journal de bêta (sur cet appareil)', cx, view.h * 0.07);
+  const left = Math.max(16, view.safeL + 12), colW = (view.w - left * 2) / 2 - 8;
+  let y = view.h * 0.16;
+  const line = (x, label, value, color = '#fff') => {
+    ctx.textAlign = 'left';
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = '#aab4d4';
+    ctx.fillText(label, x, y);
+    ctx.textAlign = 'right';
+    ctx.font = font(12 * u);
+    ctx.fillStyle = color;
+    ctx.fillText(String(value), x + colW, y);
+  };
+  // Colonne de gauche : chiffres clés
+  const rows = [
+    ['Parties lancées', J.total],
+    ['Terminées', J.done],
+    ['Abandonnées avant la fin', `${J.quit} (${J.quitRate} %)`, J.quitRate > 30 ? '#ff8787' : '#fff'],
+    ['Durée moyenne (terminées)', dur(J.avgDone)],
+    ['Durée moyenne avant abandon', dur(J.avgQuit)],
+  ];
+  for (const [label, value, color] of rows) { line(left, label, value, color); y += 17 * u; }
+  y += 6 * u;
+  const modeNames = { ffa: 'Chacun pour soi', teams: 'Équipes', hill: 'Roi de la colline' };
+  for (const [k, n] of Object.entries(J.byMode)) { line(left, `Mode ${modeNames[k] || k}`, n); y += 15 * u; }
+  for (const [k, n] of Object.entries(J.byMap)) { line(left, `Carte ${MAPS[k] ? MAPS[k].name : k}`, n); y += 15 * u; }
+  // Colonne de droite : dernières parties
+  const rx = left + colW + 16;
+  let ry = view.h * 0.16;
+  ctx.textAlign = 'left';
+  ctx.font = font(11 * u);
+  ctx.fillStyle = '#ffe066';
+  ctx.fillText('Dernières parties', rx, ry);
+  ry += 17 * u;
+  ctx.font = font(10 * u, false);
+  for (const e of J.last) {
+    const d = new Date(e.start);
+    const when = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ` +
+                 `${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`;
+    ctx.fillStyle = e.status === 'terminée' ? '#dfe6ff' : '#ff8787';
+    const map = MAPS[e.map] ? MAPS[e.map].name : '?';
+    ctx.fillText(`${when}  ${modeNames[e.mode] || e.mode} · ${map} · ${dur(e.duration)} · ${e.status}`, rx, ry);
+    ry += 15 * u;
+  }
+  if (!J.last.length) {
+    ctx.fillStyle = '#aab4d4';
+    ctx.fillText('Aucune partie pour l\'instant.', rx, ry);
   }
   ctx.textAlign = 'center';
 }
