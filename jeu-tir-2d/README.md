@@ -8,8 +8,22 @@ des bots, sur 3 cartes, en chacun pour soi, en équipes ou en « Roi de la
 colline », avec de la progression (niveaux, missions du jour, styles). Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
 amusant avant d'investir dans des serveurs ou l'App Store.
 
-Les graphismes et les sons sont **provisoires** : des formes colorées et des
-sons générés par le code. Rien ne vient d'un autre jeu.
+Graphismes et sons sont **entièrement générés par le code** (aucune image ni
+aucun son externe) : rien ne vient d'un autre jeu.
+
+### L'univers : l'Archipel
+Trois arènes suspendues au-dessus du vide, chacune avec son ambiance :
+
+| Arène | Ambiance |
+|---|---|
+| **Docks Néon** | port futuriste de nuit : pluie, éclairs, lune, ville et enseignes néon, projecteurs, eau sombre au fond des trous |
+| **Canyon Ardent** | coucher de soleil : rayons de lumière, falaises et mesas, poussière, **lave** et braises au fond des gouffres |
+| **Cité des Nuées** | cité de marbre et d'or : îles flottantes, cascades, pétales, **mer de nuages** sous l'arène |
+
+Les décors ont plusieurs plans qui défilent à des vitesses différentes (effet de
+profondeur), des lumières (lampadaires, néons, flash des tirs, explosions qui
+éclairent), des ombres sous les personnages et un léger effet « caméra de cinéma »
+(vignette).
 
 ---
 
@@ -158,7 +172,7 @@ inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir a
 
 | Bouton | Ce qu'il fait |
 |---|---|
-| **Carte** | Entrepôt (nuit), Canyon (grands gouffres), Tours (verticale, beaucoup de vol) |
+| **Carte** | Docks Néon (nuit), Canyon Ardent (grands gouffres), Cité des Nuées (verticale, beaucoup de vol) |
 | **Mode** | Chacun pour soi · Équipes (Bleus contre Rouges, 2 c. 2 ou 3 c. 3 selon le nombre de bots) · Roi de la colline |
 | **Difficulté** | Facile, Normal, Difficile : précision, réflexes et agressivité des bots |
 | **Bots** | de 3 à 7 |
@@ -240,6 +254,7 @@ précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé
 | Tremblement écran | Désactivé / Faible / Normal |
 | Mode gaucher | inverse les côtés des joysticks et des boutons |
 | Joysticks | Flottants (apparaissent sous le pouce) ou Fixes (toujours au même endroit) |
+| Qualité graphique | **Auto** (conseillé : baisse seule si le téléphone rame) / Basse / Moyenne / Haute |
 
 ---
 
@@ -293,7 +308,8 @@ Change un nombre, enregistre, recharge la page.
 | d'autres styles | `cosmetics` (avec le niveau requis) |
 | moins de tremblement / de ralenti | `feel` |
 | les valeurs proposées dans Options | `options` |
-| moins d'effets (téléphone lent) | `effects.maxParticles` |
+| moins d'effets (téléphone lent) | `effects.maxParticles`, ou l'option « Qualité graphique » |
+| le seuil du mode graphique Auto | `options.autoGraphicsFrameMs` |
 | des parties plus courtes | `rules.matchDuration` (secondes) |
 
 Les **cartes** sont dans `src/map.js` (liste `MAPS`) : rectangles, points
@@ -319,7 +335,8 @@ jeu-tir-2d/
     ├── weapon.js    chargeur, réserve, cadence, rechargement
     ├── bullet.js    projectiles : balles, roquettes, grenades
     ├── pickup.js    objets à ramasser
-    ├── map.js       les 3 cartes, ambiances, collisions
+    ├── map.js       les 3 cartes (formes, points d'apparition, objets), collisions
+    ├── scenery.js   décors de l'Archipel : ciels, plans en parallaxe, textures, météo, lumières
     ├── effects.js   particules réutilisées (aucune création pendant le jeu), explosions
     ├── hud.js       interface pendant la partie, joysticks, minicarte
     ├── menus.js     tous les écrans de menu

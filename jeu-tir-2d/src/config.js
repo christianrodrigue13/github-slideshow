@@ -269,10 +269,13 @@ export const CONFIG = {
     shake: { off: 0, faible: 0.5, normal: 1 },
     volumes: [0, 0.25, 0.5, 0.75, 1],
     autoFireAngle: 0.1,      // tir auto : l'ennemi doit être à moins de ~6° du viseur
+    // qualité graphique : auto (baisse seule si le téléphone rame), basse, moyenne, haute
+    graphics: { auto: -1, bas: 0, moyen: 1, haut: 2 },
+    autoGraphicsFrameMs: 22, // en "auto" : au-delà de ce temps moyen par image, on baisse la qualité
     // réglages au premier lancement
     defaults: {
       sensitivity: 'moyenne', aimAssist: 'faible', autoFire: false, vibration: true,
-      volume: 0.5, shake: 'normal', leftHanded: false, fixedSticks: false,
+      volume: 0.5, shake: 'normal', leftHanded: false, fixedSticks: false, graphics: 'auto',
     },
   },
 

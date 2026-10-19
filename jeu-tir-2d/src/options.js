@@ -24,6 +24,8 @@ export const OPTION_ROWS = [
   { key: 'leftHanded', label: 'Mode gaucher', values: [false, true], text: (v) => yesNo[v] },
   { key: 'fixedSticks', label: 'Joysticks', values: [false, true],
     text: (v) => (v ? 'Fixes' : 'Flottants') },
+  { key: 'graphics', label: 'Qualité graphique', values: Object.keys(O.graphics),
+    text: (v) => ({ auto: 'Auto', bas: 'Basse', moyen: 'Moyenne', haut: 'Haute' })[v] },
 ];
 
 // Charge les options sauvegardées (et corrige une valeur qui n'existe plus)

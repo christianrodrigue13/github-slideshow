@@ -7,6 +7,7 @@ import { CONFIG } from './config.js';
 import { GameMap, MAPS } from './map.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
+import { Scenery } from './scenery.js';
 import { load, save } from './save.js';
 import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights,
          playerWon } from './match.js';
@@ -58,6 +59,21 @@ initBackup();
 // Journal local anonyme des parties (écran caché : appui long sur le titre)
 const journal = loadJournal();
 let journalEntry = null;        // la partie en cours dans le journal
+
+// Décors de la carte affichée (créés une fois par carte)
+function scenery() {
+  const m = game.map;
+  if (!m.scenery) m.scenery = new Scenery(m);
+  m.scenery.setQuality(currentQuality());
+  return m.scenery;
+}
+
+// Qualité graphique : celle choisie, ou en "auto" celle que le téléphone supporte
+let autoQuality = 2;
+function currentQuality() {
+  const q = CONFIG.options.graphics[options.graphics];
+  return q >= 0 ? q : autoQuality;
+}
 
 // Ce dont les écrans de menu ont besoin
 const menuCtx = {
@@ -335,7 +351,8 @@ function goFullscreen() {
 function render() {
   // Repère écran (pixels CSS) avec prise en compte de la densité
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  game.map.drawBackground(ctx, cam, view);
+  const sc = scenery();
+  sc.drawBackground(ctx, cam, view);
 
   if (game.player) {
     // Repère monde : zoom + décalage caméra (+ tremblement)
@@ -343,17 +360,20 @@ function render() {
     ctx.save();
     ctx.scale(view.scale, view.scale);
     ctx.translate(-cam.x + (Math.random() - 0.5) * 2 * sh, -cam.y + (Math.random() - 0.5) * 2 * sh);
-    game.map.draw(ctx, cam);
+    sc.drawWorld(ctx);
     drawHillZone();
     for (const pk of game.pickups) pk.draw(ctx);
+    sc.drawShadows(ctx, game.fighters);
     for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
     drawAimGuide();
     game.player.draw(ctx);                       // le joueur par-dessus
     for (const b of game.bullets) b.draw(ctx);
     game.effects.draw(ctx);
+    sc.drawLights(ctx, game);
     drawFloaters();
     drawHitMarks();
     ctx.restore();
+    sc.drawForeground(ctx, view);
 
     if (state !== 'over') {
       const pp = worldToScreen(game.player.cx, game.player.cy);
@@ -364,8 +384,9 @@ function render() {
     ctx.save();
     ctx.scale(view.scale, view.scale);
     ctx.translate(-cam.x, -cam.y);
-    game.map.draw(ctx, cam);
+    sc.drawWorld(ctx);
     ctx.restore();
+    sc.drawForeground(ctx, view);
   }
 
   if (state === 'playing') {
@@ -506,8 +527,24 @@ function frame(now) {
     steps++;
   }
   if (steps === CONFIG.maxStepsPerFrame) accumulator = 0;
+  scenery().update(elapsed, view);
+  watchPerformance(elapsed);
   render();
   requestAnimationFrame(frame);
+}
+
+// Qualité "auto" : si les images prennent trop de temps (téléphone qui rame),
+// on retire des effets de décor, un niveau à la fois
+let frameAvg = 1 / 60, slowTime = 0;
+function watchPerformance(elapsed) {
+  if (options.graphics !== 'auto' || document.hidden) return;
+  frameAvg += (elapsed - frameAvg) * 0.05;
+  if (frameAvg * 1000 > CONFIG.options.autoGraphicsFrameMs && autoQuality > 0) {
+    slowTime += elapsed;
+    if (slowTime > 2) { autoQuality--; slowTime = 0; frameAvg = 1 / 60; }
+  } else {
+    slowTime = 0;
+  }
 }
 
 // Le son ne peut démarrer qu'après un premier geste (règle des navigateurs)

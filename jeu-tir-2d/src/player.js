@@ -315,6 +315,16 @@ export class Fighter {
     ctx.beginPath();
     ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
     ctx.fill();
+    // Contour sombre : le personnage reste lisible sur tous les décors
+    // (même un personnage blanc devant des nuages blancs)
+    ctx.strokeStyle = 'rgba(10,12,25,0.75)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x + 2, y + 15, w - 4, h - 27, 6); else ctx.rect(x + 2, y + 15, w - 4, h - 27);
+    ctx.stroke();
     // Ceinture
     ctx.fillStyle = dark;
     ctx.fillRect(x + 2, hipY - 3, w - 4, 3);

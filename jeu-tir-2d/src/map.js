@@ -1,5 +1,6 @@
 // =====================================================================
-// map.js — Les cartes : plateformes, murs, obstacles, collisions, décor.
+// map.js — Les cartes : plateformes, murs, obstacles, collisions.
+// (Le dessin des décors est dans scenery.js.)
 // Chaque élément solide est un rectangle {x, y, w, h}.
 // L'axe y descend (y = 0 en haut, comme sur un écran).
 // Pour créer une carte : copier une fiche de MAPS et changer les nombres.
@@ -11,30 +12,11 @@ const S = (x, y) => ({ x, y });                     // point d'apparition
 const P = (x, y, type) => ({ x, y, type });         // objet à ramasser
 // Pour S et P : x = centre, y = surface du sol juste en dessous
 
-// Couleurs et décor de chaque ambiance
-const THEMES = {
-  nuit: {
-    skyTop: '#0b1024', skyBottom: '#1f2a4f', far: '#121a33', mid: 'rgba(255,255,255,0.035)',
-    solid: '#3a4a6b', top: '#5c7cad', dark: '#29354f', glow: '255,60,90',
-    skyline: 'city', stars: true,
-  },
-  coucher: {
-    skyTop: '#2b1d3a', skyBottom: '#f0915f', far: '#5c2f40', mid: 'rgba(60,20,30,0.18)',
-    solid: '#8a5a3c', top: '#d39563', dark: '#5e3b28', glow: '255,110,40',
-    skyline: 'mountains', stars: false,
-  },
-  jour: {
-    skyTop: '#3d8fe0', skyBottom: '#cfe8ff', far: '#9cc2e3', mid: 'rgba(255,255,255,0.25)',
-    solid: '#5f6b7a', top: '#a4b1c2', dark: '#3f4955', glow: '30,70,140',
-    skyline: 'spires', stars: false,
-  },
-};
-
 export const MAPS = [
   {
     id: 'entrepot',
-    name: 'Entrepôt',
-    theme: 'nuit',
+    name: 'Docks Néon',
+    theme: 'nuit',              // ambiance (voir scenery.js)
     width: 3200, height: 1400,
     solids: [
       R(0, 0, 40, 1400), R(3160, 0, 40, 1400), R(0, 0, 3200, 40),   // bords
@@ -68,7 +50,7 @@ export const MAPS = [
   },
   {
     id: 'canyon',
-    name: 'Canyon',
+    name: 'Canyon Ardent',
     theme: 'coucher',
     width: 3600, height: 1500,
     solids: [
@@ -101,7 +83,7 @@ export const MAPS = [
   },
   {
     id: 'tours',
-    name: 'Tours',
+    name: 'Cité des Nuées',
     theme: 'jour',
     width: 2400, height: 2000,
     solids: [
@@ -150,25 +132,7 @@ export class GameMap {
     this.spawns = def.spawns;
     this.pickupSpots = def.pickups;
     this.hill = def.hill;             // zone du mode Roi de la colline
-    this.theme = THEMES[def.theme];
-
-    // Décor généré une fois (purement visuel) ; graine fixe → même décor à chaque partie
-    let seed = def.width * 7 + def.height;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    this.decor = [];
-    for (let i = 0; i < 40; i++) {
-      this.decor.push({ x: rnd() * this.width, y: 100 + rnd() * (this.height - 500),
-                        w: 60 + rnd() * 200, h: 100 + rnd() * 500 });
-    }
-    // Silhouettes lointaines (immeubles, montagnes ou flèches), répétées en boucle
-    this.skyline = [];
-    for (let x = 0; x < 2000;) {
-      const w = 60 + rnd() * 140;
-      this.skyline.push({ x, w, h: 0.15 + rnd() * 0.35 });
-      x += w * (this.theme.skyline === 'mountains' ? 0.7 : 1);
-    }
-    this.stars = [];
-    for (let i = 0; i < 70; i++) this.stars.push({ x: rnd(), y: rnd() * 0.7, r: rnd() * 1.4 + 0.3 });
+    this.scenery = null;              // décors (créés à l'affichage, voir scenery.js)
   }
 
   // Le rectangle donné chevauche-t-il un élément solide ?
@@ -220,93 +184,6 @@ export class GameMap {
       }
     }
     return best;
-  }
-
-  // ----------------------------- Dessin -----------------------------
-
-  // Fond d'écran (ciel, étoiles, silhouettes) — en pixels écran
-  drawBackground(ctx, cam, view) {
-    const T = this.theme;
-    // (le dégradé n'est recalculé que si la hauteur de l'écran change)
-    if (!this.skyGradient || this.skyGradientH !== view.h) {
-      this.skyGradient = ctx.createLinearGradient(0, 0, 0, view.h);
-      this.skyGradient.addColorStop(0, T.skyTop);
-      this.skyGradient.addColorStop(1, T.skyBottom);
-      this.skyGradientH = view.h;
-    }
-    ctx.fillStyle = this.skyGradient;
-    ctx.fillRect(0, 0, view.w, view.h);
-
-    if (T.stars) {
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      for (const st of this.stars) {
-        const sx = ((st.x * view.w - cam.x * 0.05 * view.scale) % view.w + view.w) % view.w;
-        ctx.fillRect(sx, st.y * view.h, st.r, st.r);
-      }
-    }
-
-    // Silhouettes : défilent à 20 % de la vitesse de la caméra
-    ctx.fillStyle = T.far;
-    const k = view.scale;
-    const base = view.h * 0.95 - cam.y * 0.08 * k;
-    const tile = 2000 * k;
-    const off = ((-cam.x * 0.2 * k) % tile + tile) % tile - tile;
-    for (let t = off; t < view.w; t += tile) {
-      for (const b of this.skyline) {
-        const x = t + b.x * k, w = b.w * k, h = b.h * view.h;
-        if (x > view.w || x + w < 0) continue;
-        if (T.skyline === 'mountains') {
-          ctx.beginPath();
-          ctx.moveTo(x - w * 0.4, base);
-          ctx.lineTo(x + w / 2, base - h * 1.2);
-          ctx.lineTo(x + w * 1.4, base);
-          ctx.fill();
-        } else if (T.skyline === 'spires') {
-          ctx.fillRect(x + w * 0.3, base - h, w * 0.4, h);
-          ctx.beginPath();
-          ctx.moveTo(x + w * 0.3, base - h);
-          ctx.lineTo(x + w / 2, base - h - 40 * k);
-          ctx.lineTo(x + w * 0.7, base - h);
-          ctx.fill();
-        } else {
-          ctx.fillRect(x, base - h, w - 6 * k, h);
-        }
-      }
-    }
-    ctx.fillRect(0, base, view.w, view.h - base);
-  }
-
-  // Décor proche, vide et éléments solides — en coordonnées monde
-  draw(ctx, cam) {
-    const T = this.theme;
-    // Décor intermédiaire : suit à moitié la caméra (effet de profondeur)
-    ctx.fillStyle = T.mid;
-    for (const d of this.decor) {
-      ctx.fillRect(d.x + cam.x * 0.5, d.y + cam.y * 0.4, d.w, d.h);
-    }
-
-    // Lueur du vide en bas de la carte
-    const g = ctx.createLinearGradient(0, this.height - 120, 0, this.killY);
-    g.addColorStop(0, `rgba(${T.glow},0)`);
-    g.addColorStop(1, `rgba(${T.glow},0.45)`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, this.height - 120, this.width, this.killY - this.height + 120);
-
-    // Éléments solides : corps, liseré clair dessus, ombre dessous, rivets
-    for (const s of this.solids) {
-      ctx.fillStyle = T.solid;
-      ctx.fillRect(s.x, s.y, s.w, s.h);
-      if (s.h > 30) {
-        ctx.fillStyle = T.dark;
-        ctx.fillRect(s.x, s.y + s.h - 6, s.w, 6);
-      }
-      ctx.fillStyle = T.top;
-      ctx.fillRect(s.x, s.y, s.w, Math.min(5, s.h));
-      if (s.w > 100 && s.h < 40) {
-        ctx.fillStyle = T.dark;
-        for (let rx = s.x + 14; rx < s.x + s.w - 10; rx += 40) ctx.fillRect(rx, s.y + s.h - 8, 4, 4);
-      }
-    }
   }
 }
 
