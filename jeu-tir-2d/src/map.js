@@ -102,12 +102,12 @@ export const MAPS = [
       // Sol avec un grand gouffre au milieu et deux marchepieds
       R(40, 1800, 860, 200), R(1500, 1800, 860, 200),
       R(1000, 1640, 140, 28), R(1260, 1640, 140, 28),
-      // Tour de gauche : un pilier et des étages de chaque côté
-      R(260, 620, 80, 1180),
+      // Tour de gauche : un pilier (on peut passer dessous) et des étages autour
+      R(260, 900, 80, 500),
       R(100, 1550, 160, 24), R(340, 1400, 200, 24), R(100, 1250, 160, 24),
       R(340, 1100, 200, 24), R(100, 950, 160, 24), R(340, 800, 200, 24),
       // Tour de droite (symétrique)
-      R(2060, 620, 80, 1180),
+      R(2060, 900, 80, 500),
       R(2140, 1550, 160, 24), R(1860, 1400, 200, 24), R(2140, 1250, 160, 24),
       R(1860, 1100, 200, 24), R(2140, 950, 160, 24), R(1860, 800, 200, 24),
       // Structure centrale flottante

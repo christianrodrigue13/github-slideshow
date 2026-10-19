@@ -7,8 +7,10 @@
 import { CONFIG } from './config.js';
 
 export class BotBrain {
-  constructor(fighter) {
+  // skill = { aimError, reactionTime } : vient de la difficulté choisie
+  constructor(fighter, skill) {
     this.f = fighter;
+    this.skill = skill;
     this.target = null;
     this.retargetTimer = 0;
     this.seeTimer = 0;          // depuis combien de temps il voit sa cible
@@ -111,7 +113,9 @@ export class BotBrain {
     else this.stuckTimer = 0;
     this.lastX = me.x;
     // (on vole alors un petit moment, quelle que soit la hauteur de la cible)
-    if (this.stuckTimer > 0.2) this.climbTimer = 0.5;
+    // (sans carburant, inutile de sauter contre un grand mur : on attend au sol
+    //  que le jetpack se recharge, sinon on ne recharge jamais)
+    if (this.stuckTimer > 0.2 && (me.fuel > 25 || !me.grounded)) this.climbTimer = 0.5;
     if (this.stuckTimer > 2) { this.wanderDir = -dir; dir = -dir; this.stuckTimer = 0; }
     if (this.climbTimer > 0) this.climbTimer -= dt;
 
@@ -155,7 +159,7 @@ export class BotBrain {
     this.aimTimer -= dt;
     if (this.aimTimer <= 0) {
       // L'erreur de visée change régulièrement → précision réglable
-      this.aimOffset = (Math.random() * 2 - 1) * B.aimError;
+      this.aimOffset = (Math.random() * 2 - 1) * this.skill.aimError;
       this.aimTimer = 0.25 + Math.random() * 0.25;
     }
     if (t && visible) {
@@ -192,7 +196,7 @@ export class BotBrain {
     if (this.burstTimer > cycle) this.burstTimer -= cycle;
     const inBurst = this.burstTimer < B.burstTime;
     const tooCloseForBlast = me.weapon.def.kind === 'grenade' && dist < 110;
-    if (visible && this.seeTimer >= B.reactionTime && inBurst && !tooCloseForBlast &&
+    if (visible && this.seeTimer >= this.skill.reactionTime && inBurst && !tooCloseForBlast &&
         dist < me.weapon.def.range * 0.9) {
       cmd.fire = true;
     }

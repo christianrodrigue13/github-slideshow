@@ -132,16 +132,34 @@ export const CONFIG = {
 
   // --- Bots ---
   bots: {
-    count: 4,                // nombre d'ennemis (3 à 5 conseillé)
-    aimError: 0.16,          // erreur de visée en radians (0 = parfait, 0.3 = maladroit)
-    reactionTime: 0.45,      // temps avant de tirer sur une nouvelle cible
+    count: 4,                // nombre de bots par défaut (modifiable dans le menu : 3 à 7)
+    // (la précision et le temps de réaction dépendent de la difficulté, plus bas)
     sightRange: 900,         // distance à laquelle ils te repèrent
     preferredDistance: 320,  // distance qu'ils essaient de garder
     burstTime: 1.0,          // durée d'une rafale
     burstPause: 0.55,        // pause entre deux rafales
     playerPreference: 1.3,   // >1 : les bots s'en prennent un peu plus à toi
-    names: ['Rouille', 'Cobalt', 'Mangue', 'Pixel', 'Orage'],
-    colors: ['#ff6b6b', '#4dabf7', '#ffa94d', '#b197fc', '#69db7c'],
+    names: ['Rouille', 'Cobalt', 'Mangue', 'Pixel', 'Orage', 'Brique', 'Néon'],
+    colors: ['#ff6b6b', '#4dabf7', '#ffa94d', '#b197fc', '#69db7c', '#f783ac', '#ffd43b'],
+  },
+
+  // --- Difficulté (choisie dans le menu) ---
+  // aimError : erreur de visée des bots en radians (0 = parfait)
+  // reactionTime : temps avant qu'un bot tire sur une cible qu'il vient de voir
+  // damage : multiplicateur des dégâts infligés par les bots
+  difficulties: {
+    facile:    { label: 'Facile',    aimError: 0.28, reactionTime: 0.8,  damage: 0.7 },
+    normal:    { label: 'Normal',    aimError: 0.16, reactionTime: 0.45, damage: 1 },
+    difficile: { label: 'Difficile', aimError: 0.08, reactionTime: 0.25, damage: 1.15 },
+  },
+
+  // --- Mode équipes ---
+  teams: {
+    names: ['Bleus', 'Rouges'],
+    colors: ['#4dabf7', '#ff6b6b'],          // couleur de chaque équipe
+    // nuances pour distinguer les bots d'une même équipe
+    shades: [['#4dabf7', '#3bc9db', '#748ffc', '#66d9e8'],
+             ['#ff6b6b', '#ffa94d', '#f783ac', '#ff8787']],
   },
 
   // --- Règles de la partie ---

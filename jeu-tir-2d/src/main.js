@@ -26,9 +26,26 @@ const cam = { x: 0, y: 0 };
 // 'menu' | 'playing' | 'paused' | 'over'
 let state = 'menu';
 
+// Réglages choisis dans le menu (mémorisés d'une partie à l'autre)
+const DIFFS = Object.keys(CONFIG.difficulties);
+const settings = { map: 0, mode: 'ffa', difficulty: 'normal', bots: CONFIG.bots.count };
+try {
+  Object.assign(settings, JSON.parse(localStorage.getItem('jetarena-settings') || '{}'));
+} catch (_) { /* réglages par défaut */ }
+// (sécurité si les valeurs mémorisées ne sont plus valables)
+if (!MAPS[settings.map]) settings.map = 0;
+if (!DIFFS.includes(settings.difficulty)) settings.difficulty = 'normal';
+settings.bots = Math.max(3, Math.min(7, settings.bots | 0));
+
+function saveSettings() {
+  try { localStorage.setItem('jetarena-settings', JSON.stringify(settings)); } catch (_) { /* rien */ }
+}
+
 // L'état partagé de la partie, transmis aux personnages et aux balles
 const game = {
-  map: new GameMap(MAPS[0]),
+  map: new GameMap(MAPS[settings.map]),
+  settings,
+  teams: false,         // vrai en mode équipes
   fighters: [],
   bots: [],             // { fighter, brain }
   player: null,
@@ -43,8 +60,10 @@ const game = {
   sound,
 
   // Un tir de "tireur" peut-il toucher "cible" ? (jamais soi-même)
+  // (en équipes : jamais un coéquipier, les balles le traversent)
   canHit(shooter, target) {
-    return shooter !== target;
+    if (shooter === target) return false;
+    return !game.teams || shooter.team !== target.team;
   },
 
   // Une balle touche quelqu'un
@@ -56,6 +75,7 @@ const game = {
   // Inflige des dégâts (le bouclier encaisse en premier) + petite poussée
   damage(target, amount, attacker, pushX, pushY) {
     if (!target.alive || target.protectTimer > 0) return;  // invincible après réapparition
+    if (attacker && attacker.isBot) amount *= CONFIG.difficulties[settings.difficulty].damage;
     if (target.shield > 0) {
       const absorbed = Math.min(target.shield, amount);
       target.shield -= absorbed;
@@ -213,15 +233,24 @@ function worldToScreen(x, y) {
 // Règles de la partie
 // ---------------------------------------------------------------------
 function startMatch() {
-  game.player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color });
+  game.map = new GameMap(MAPS[settings.map]);
+  game.teams = settings.mode === 'teams';
+  game.player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color, team: 0 });
   game.fighters = [game.player];
   game.bots = [];
-  const B = CONFIG.bots;
-  for (let i = 0; i < B.count; i++) {
-    const f = new Fighter({ name: B.names[i % B.names.length],
-                            color: B.colors[i % B.colors.length], isBot: true });
+  const B = CONFIG.bots, T = CONFIG.teams;
+  const skill = CONFIG.difficulties[settings.difficulty];
+  // En équipes : l'équipe du joueur a la moitié (arrondie en dessous) des places
+  const total = settings.bots + 1;
+  const team0Size = Math.floor(total / 2);
+  for (let i = 0; i < settings.bots; i++) {
+    const team = game.teams && i + 1 >= team0Size ? 1 : 0;
+    const shades = T.shades[team];
+    const color = game.teams ? shades[i % shades.length] : B.colors[i % B.colors.length];
+    const f = new Fighter({ name: B.names[i % B.names.length], color, isBot: true, team });
+    if (game.teams) f.labelColor = T.colors[team];
     game.fighters.push(f);
-    game.bots.push({ fighter: f, brain: new BotBrain(f) });
+    game.bots.push({ fighter: f, brain: new BotBrain(f, skill) });
   }
   // Chacun sur un point d'apparition différent
   const spawns = [...game.map.spawns].sort(() => Math.random() - 0.5);
@@ -254,7 +283,7 @@ function setState(s) {
 // Point d'apparition le plus éloigné des adversaires vivants
 // (on tire au sort parmi les 3 meilleurs pour varier)
 function chooseSpawn(f) {
-  const others = game.fighters.filter((o) => o !== f && o.alive);
+  const others = game.fighters.filter((o) => o.alive && game.canHit(f, o));   // les adversaires
   const scored = game.map.spawns.map((s) => {
     let d = Infinity;
     for (const o of others) d = Math.min(d, Math.hypot(o.cx - s.x, o.cy - s.y));
@@ -377,12 +406,52 @@ function handleMenuTaps() {
       startMatch();
     } else if (id === 'replay' || id === 'restart') {
       startMatch();
+    } else if (id === 'mainmenu') {
+      goToMainMenu();
+    } else if (id && id.includes(':')) {
+      changeSetting(id);
     } else if (id === 'resume') {
       setState('playing');
     } else if (id === 'sound') {
       sound.toggleMute();
     }
   }
+}
+
+// Boutons ◀ ▶ du menu : id = "réglage:sens" (ex. "map:+1")
+function changeSetting(id) {
+  const [key, dirStr] = id.split(':');
+  const dir = Number(dirStr);
+  const cycle = (list, cur) => list[(list.indexOf(cur) + dir + list.length) % list.length];
+  if (key === 'map') {
+    settings.map = (settings.map + dir + MAPS.length) % MAPS.length;
+    game.map = new GameMap(MAPS[settings.map]);   // la carte s'affiche en fond
+    centerMenuCamera();
+  }
+  if (key === 'mode') settings.mode = cycle(['ffa', 'teams'], settings.mode);
+  if (key === 'difficulty') settings.difficulty = cycle(DIFFS, settings.difficulty);
+  if (key === 'bots') settings.bots = 3 + ((settings.bots - 3 + dir + 5) % 5);
+  sound.play('switch');
+  saveSettings();
+}
+
+function goToMainMenu() {
+  game.player = null;
+  game.fighters = [];
+  game.bots = [];
+  game.bullets = [];
+  game.pickups = [];
+  game.particles = [];
+  game.effects = [];
+  centerMenuCamera();
+  setState('menu');
+}
+
+// Sur le menu : la caméra montre le centre de la carte choisie
+function centerMenuCamera() {
+  const viewW = view.w / view.scale, viewH = view.h / view.scale;
+  cam.x = (game.map.width - viewW) / 2;
+  cam.y = Math.max(0, game.map.height - viewH - 50);
 }
 
 // Plein écran + verrouillage paysage (Android ; ignoré ailleurs)
@@ -500,5 +569,5 @@ window.__debug = () => ({
 });
 window.__game = game;   // (tests automatiques uniquement)
 
-cam.x = 1000; cam.y = 600;
+centerMenuCamera();
 requestAnimationFrame(frame);

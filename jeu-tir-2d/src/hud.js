@@ -5,6 +5,7 @@
 // =====================================================================
 
 import { CONFIG } from './config.js';
+import { MAPS } from './map.js';
 
 // Unité de taille : s'adapte à la hauteur de l'écran
 function unit(view) {
@@ -34,6 +35,13 @@ export function formatTime(t) {
 // Classement : plus d'éliminations d'abord, puis moins de morts
 export function ranking(fighters) {
   return [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+}
+
+// Total des éliminations de chaque équipe : [équipe 0, équipe 1]
+export function teamScores(fighters) {
+  const sc = [0, 0];
+  for (const f of fighters) sc[f.team] += f.kills;
+  return sc;
 }
 
 // ---------------------------------------------------------------------
@@ -96,11 +104,29 @@ export function drawHUD(ctx, game, view) {
   ctx.font = font(22 * u);
   ctx.fillStyle = game.timeLeft < 30 ? '#ff8787' : '#fff';
   ctx.fillText(formatTime(game.timeLeft), cx, 20 * u);
-  const rank = ranking(game.fighters).indexOf(p) + 1;
   ctx.font = font(12 * u, false);
   ctx.fillStyle = '#dfe6ff';
-  ctx.fillText(`Éliminations : ${p.kills}   ·   Place : ${rank}/${game.fighters.length}`,
-               cx, 42 * u);
+  if (game.teams) {
+    // Score des équipes, chacune dans sa couleur
+    const [s0, s1] = teamScores(game.fighters);
+    const T = CONFIG.teams;
+    const left = `${T.names[0]} ${s0}`, right = `${s1} ${T.names[1]}`;
+    ctx.font = font(13 * u);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = T.colors[0];
+    ctx.fillText(left, cx - 10 * u, 42 * u);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('—', cx, 42 * u);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = T.colors[1];
+    ctx.fillText(right, cx + 10 * u, 42 * u);
+    ctx.textAlign = 'center';
+  } else {
+    const rank = ranking(game.fighters).indexOf(p) + 1;
+    ctx.fillText(`Éliminations : ${p.kills}   ·   Place : ${rank}/${game.fighters.length}`,
+                 cx, 42 * u);
+  }
 
   // Fil des éliminations (en haut à droite, sous le bouton pause)
   ctx.textAlign = 'right';
@@ -196,6 +222,21 @@ export function drawTouchControls(ctx, input) {
 // Menus
 // ---------------------------------------------------------------------
 
+// Lignes de réglage du menu principal
+const SETTING_ROWS = [
+  { key: 'map', label: 'Carte' },
+  { key: 'mode', label: 'Mode' },
+  { key: 'difficulty', label: 'Difficulté' },
+  { key: 'bots', label: 'Bots' },
+];
+
+function settingValue(key, settings) {
+  if (key === 'map') return MAPS[settings.map].name;
+  if (key === 'mode') return settings.mode === 'teams' ? 'Équipes' : 'Chacun pour soi';
+  if (key === 'difficulty') return CONFIG.difficulties[settings.difficulty].label;
+  return String(settings.bots);
+}
+
 // Position des boutons de chaque menu (sert au dessin ET aux clics)
 export function menuButtons(state, view, game) {
   const u = unit(view);
@@ -203,18 +244,39 @@ export function menuButtons(state, view, game) {
   const cx = view.w / 2 - bw / 2;
   const btn = (id, label, y) => ({ id, label, x: cx, y, w: bw, h: bh });
   if (state === 'menu') {
-    return [btn('play', 'JOUER', view.h * 0.55)];
+    // Chaque réglage : [◀] [valeur (touche = suivant)] [▶]
+    const list = [];
+    const rh = Math.min(40 * u, view.h * 0.105), rgap = rh * 0.2;
+    const rw = Math.min(view.w - 40, 330 * u), aw = rh * 1.1;
+    const x0 = view.w / 2 - rw / 2;
+    let y = view.h * 0.27;
+    for (const row of SETTING_ROWS) {
+      list.push({ id: `${row.key}:-1`, label: '◀', x: x0, y, w: aw, h: rh, small: true });
+      list.push({ id: `${row.key}:1`, label: settingValue(row.key, game.settings), caption: row.label,
+                  x: x0 + aw + 4, y, w: rw - 2 * aw - 8, h: rh, setting: true });
+      list.push({ id: `${row.key}:1`, label: '▶', x: x0 + rw - aw, y, w: aw, h: rh, small: true });
+      y += rh + rgap;
+    }
+    list.push({ ...btn('play', 'JOUER', y + rgap), h: Math.min(bh, view.h * 0.12) });
+    return list;
   }
   if (state === 'paused') {
-    const y0 = view.h * 0.32;
+    const h2 = Math.min(bh, view.h * 0.115), g2 = h2 * 0.25;
+    const y0 = view.h * 0.27;
+    const b2 = (id, label, i) => ({ id, label, x: cx, y: y0 + i * (h2 + g2), w: bw, h: h2 });
     return [
-      btn('resume', 'Reprendre', y0),
-      btn('restart', 'Recommencer', y0 + bh + gap),
-      btn('sound', game.sound.muted ? 'Son : coupé' : 'Son : activé', y0 + 2 * (bh + gap)),
+      b2('resume', 'Reprendre', 0),
+      b2('restart', 'Recommencer', 1),
+      b2('sound', game.sound.muted ? 'Son : coupé' : 'Son : activé', 2),
+      b2('mainmenu', 'Menu principal', 3),
     ];
   }
   if (state === 'over') {
-    return [btn('replay', 'Rejouer', view.h - bh - 16 * u)];
+    const w2 = bw * 0.9;
+    return [
+      { id: 'replay', label: 'Rejouer', x: view.w / 2 - w2 - 6 * u, y: view.h - bh - 12 * u, w: w2, h: bh },
+      { id: 'mainmenu', label: 'Menu', x: view.w / 2 + 6 * u, y: view.h - bh - 12 * u, w: w2, h: bh },
+    ];
   }
   return [];
 }
@@ -222,7 +284,10 @@ export function menuButtons(state, view, game) {
 // Renvoie l'id du bouton touché, ou null
 export function hitMenu(buttons, tap) {
   // Touche Entrée / Espace = premier bouton
-  if (tap.key) return buttons.length ? buttons[0].id : null;
+  if (tap.key) {
+    const main = buttons.find((b) => ['play', 'resume', 'replay'].includes(b.id));
+    return main ? main.id : null;
+  }
   for (const b of buttons) {
     if (tap.x >= b.x && tap.x <= b.x + b.w && tap.y >= b.y && tap.y <= b.y + b.h) return b.id;
   }
@@ -231,6 +296,29 @@ export function hitMenu(buttons, tap) {
 
 function drawButtons(ctx, buttons, u) {
   for (const b of buttons) {
+    if (b.setting || b.small) {
+      ctx.fillStyle = b.small ? 'rgba(255,255,255,0.10)' : 'rgba(20,28,52,0.85)';
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 8 * u) : ctx.rect(b.x, b.y, b.w, b.h);
+      ctx.fill();
+      ctx.textBaseline = 'middle';
+      if (b.setting) {
+        ctx.font = font(10 * u, false);
+        ctx.fillStyle = '#aab4d4';
+        ctx.textAlign = 'left';
+        ctx.fillText(b.caption, b.x + 10 * u, b.y + b.h / 2);
+        ctx.font = font(15 * u);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label, b.x + b.w / 2 + 20 * u, b.y + b.h / 2 + 1);
+      } else {
+        ctx.font = font(14 * u);
+        ctx.fillStyle = '#ffb347';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
+      }
+      continue;
+    }
     ctx.fillStyle = b.id === 'play' || b.id === 'replay' || b.id === 'resume' ? '#ffb347' : '#3a4a6b';
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 10 * u) : ctx.rect(b.x, b.y, b.w, b.h);
@@ -253,24 +341,18 @@ export function drawMenu(ctx, state, view, game) {
 
   if (state === 'menu') {
     ctx.fillStyle = '#ffb347';
-    ctx.font = font(44 * u);
-    ctx.fillText('JET ARENA', cx, view.h * 0.2);
-    ctx.fillStyle = '#dfe6ff';
-    ctx.font = font(14 * u, false);
-    ctx.fillText(`Prototype — toi contre ${CONFIG.bots.count} bots, ` +
-                 `${Math.round(CONFIG.rules.matchDuration / 60)} minutes`, cx, view.h * 0.2 + 36 * u);
-    ctx.font = font(12 * u, false);
+    ctx.font = font(Math.min(40 * u, view.h * 0.11));
+    ctx.fillText('JET ARENA', cx, view.h * 0.11);
     ctx.fillStyle = '#aab4d4';
-    ctx.fillText('Téléphone : pouce gauche = bouger / voler (vers le haut),  pouce droit = viser et tirer',
-                 cx, view.h * 0.38);
-    ctx.fillText('Ordinateur : Z Q S D ou flèches, Espace = voler, souris = viser / tirer, R = recharger, E = arme',
-                 cx, view.h * 0.38 + 20 * u);
+    ctx.font = font(11 * u, false);
+    ctx.fillText('Pouce gauche : bouger / voler   ·   Pouce droit : viser / tirer   ·   ' +
+                 'Clavier : ZQSD + souris', cx, view.h * 0.205);
   }
 
   if (state === 'paused') {
     ctx.fillStyle = '#fff';
-    ctx.font = font(30 * u);
-    ctx.fillText('Pause', cx, view.h * 0.18);
+    ctx.font = font(28 * u);
+    ctx.fillText('Pause', cx, view.h * 0.15);
   }
 
   if (state === 'over') {
@@ -278,17 +360,31 @@ export function drawMenu(ctx, state, view, game) {
     ctx.font = font(28 * u);
     const [first, second] = ranking(game.fighters);
     let title = 'Fin de la partie';
-    if (first === game.player) {
+    let rows = ranking(game.fighters);
+    if (game.teams) {
+      const [s0, s1] = teamScores(game.fighters);
+      const T = CONFIG.teams;
+      title = s0 === s1 ? 'Égalité !' : (s0 > s1 ? `Victoire des ${T.names[0]} !` : `Victoire des ${T.names[1]}…`);
+      ctx.fillStyle = s0 === s1 ? '#fff' : T.colors[s0 > s1 ? 0 : 1];
+      // classement regroupé par équipe
+      rows = [...rows].sort((a, b) => a.team - b.team);
+    } else if (first === game.player) {
       title = second && second.kills === first.kills ? 'Égalité en tête !' : 'Victoire !';
     }
     ctx.fillText(title, cx, 26 * u);
+    if (game.teams) {
+      const [s0, s1] = teamScores(game.fighters);
+      ctx.font = font(13 * u, false);
+      ctx.fillStyle = '#dfe6ff';
+      ctx.fillText(`${CONFIG.teams.names[0]} ${s0}  —  ${s1} ${CONFIG.teams.names[1]}`, cx, 48 * u);
+    }
 
     // Tableau du classement
-    const rows = ranking(game.fighters);
-    const rowH = Math.min(26 * u, (view.h - 150 * u) / (rows.length + 1));
+    const top = game.teams ? 70 * u : 60 * u;
+    const rowH = Math.min(26 * u, (view.h - top - 70 * u) / (rows.length + 1));
     const tw = Math.min(view.w - 40, 420 * u);
     const x0 = cx - tw / 2;
-    let y = 60 * u;
+    let y = top;
     ctx.font = font(12 * u);
     ctx.fillStyle = '#aab4d4';
     ctx.textAlign = 'left';
@@ -307,7 +403,7 @@ export function drawMenu(ctx, state, view, game) {
       ctx.textAlign = 'left';
       ctx.fillStyle = '#fff';
       ctx.fillText(String(i + 1), x0 + 8, y);
-      ctx.fillStyle = f.color;
+      ctx.fillStyle = game.teams ? CONFIG.teams.colors[f.team] : f.color;
       ctx.fillText(f.name, x0 + 40 * u, y);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#fff';
