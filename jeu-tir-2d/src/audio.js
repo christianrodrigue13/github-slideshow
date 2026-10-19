@@ -105,6 +105,22 @@ export class Sound {
         this.burst(0.28, 1100, 'lowpass', 0.9 * vol);
         this.tone('sine', 120, 40, 0.2, 0.8 * vol);
         break;
+      case 'sniper':
+        this.burst(0.18, 2600, 'highpass', 0.7 * vol);
+        this.tone('sawtooth', 420, 50, 0.22, 0.35 * vol);
+        break;
+      case 'launcher':
+        this.tone('sine', 220, 70, 0.18, 0.7 * vol);
+        this.burst(0.12, 500, 'lowpass', 0.5 * vol);
+        break;
+      case 'explosion':
+        this.burst(0.7, 450, 'lowpass', 1.0 * vol);
+        this.tone('sine', 90, 30, 0.6, 0.9 * vol);
+        break;
+      case 'pickup':
+        this.tone('triangle', 600, 1200, 0.12, 0.3 * vol);
+        this.tone('triangle', 900, 1500, 0.1, 0.25 * vol, 0.1);
+        break;
       case 'hurt':      // on est touché
         this.tone('square', 240, 90, 0.12, 0.25 * vol);
         break;

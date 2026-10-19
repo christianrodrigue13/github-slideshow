@@ -4,18 +4,27 @@
 // course, saut, jetpack, gravité, collisions avec la carte.
 // =====================================================================
 
-import { CONFIG } from './config.js';
+import { CONFIG, weaponDef } from './config.js';
 import { Weapon } from './weapon.js';
-import { Bullet } from './bullet.js';
+import { Bullet, Grenade } from './bullet.js';
+
+// Apparence de chaque arme : longueur, épaisseur, couleur de la crosse
+const GUN_LOOK = {
+  rifle:    { len: 27, thick: 5, stock: '#3d4356' },
+  shotgun:  { len: 22, thick: 7, stock: '#8c5a2b' },
+  sniper:   { len: 38, thick: 4, stock: '#2f3b52', scope: true },
+  launcher: { len: 24, thick: 10, stock: '#4b6b4f' },
+};
 
 let nextId = 1;
 
 export class Fighter {
-  constructor({ name, color, isBot = false }) {
+  constructor({ name, color, isBot = false, team = 0 }) {
     this.id = nextId++;
     this.name = name;
     this.color = color;
     this.isBot = isBot;
+    this.team = team;            // équipe (utilisé en mode équipes)
 
     const F = CONFIG.fighter;
     this.w = F.width;
@@ -24,6 +33,7 @@ export class Fighter {
     this.vx = 0; this.vy = 0;
 
     this.health = F.maxHealth;
+    this.shield = 0;             // points de bouclier (absorbent les dégâts en premier)
     this.alive = true;
     this.grounded = false;
     this.fuel = CONFIG.jetpack.maxFuel;
@@ -32,9 +42,9 @@ export class Fighter {
     this.aimAngle = 0;
     this.facing = 1;             // 1 = droite, -1 = gauche
 
-    // Armes : une de chaque type défini dans config.js
-    this.weapons = CONFIG.weapons.map((def) => new Weapon(def));
-    this.weaponIndex = 0;
+    // Armes : [0] = principale, [1] = secondaire (remplaçable)
+    this.weapons = [];
+    this.resetWeapons();
     this.muzzleFlash = 0;        // durée restante de l'éclair au bout du canon
 
     // Partie
@@ -45,16 +55,29 @@ export class Fighter {
     this.hitFlash = 0;           // clignotement blanc quand on est touché
     this.lastAttacker = null;    // dernier tireur (pour les chutes dans le vide)
     this.lastAttackTime = -999;
+    this.lastShotTime = -999;    // moment du dernier tir (radar de la minicarte)
+  }
+
+  resetWeapons() {
+    this.weapons = [new Weapon(weaponDef(CONFIG.loadout.primary)),
+                    new Weapon(weaponDef(CONFIG.loadout.secondary))];
+    this.weaponIndex = 0;
+  }
+
+  // Ramasser une arme : elle remplace l'arme secondaire et on la prend en main
+  giveSecondary(id) {
+    this.weapons[1] = new Weapon(weaponDef(id));
+    this.weaponIndex = 1;
   }
 
   // Réapparition : tout est remis à neuf
   respawn(spawn) {
     this.placeAt(spawn.x, spawn.y);
     this.health = CONFIG.fighter.maxHealth;
+    this.shield = 0;
     this.alive = true;
     this.fuel = CONFIG.jetpack.maxFuel;
-    for (const w of this.weapons) w.refill();
-    this.weaponIndex = 0;
+    this.resetWeapons();
     this.protectTimer = CONFIG.rules.spawnProtection;
     this.hitFlash = 0;
     this.jetting = false;
@@ -162,8 +185,10 @@ export class Fighter {
     const def = this.weapon.def;
     for (let i = 0; i < def.pellets; i++) {
       const angle = this.aimAngle + (Math.random() - 0.5) * 2 * def.spread;
-      game.bullets.push(new Bullet(this.shoulderX, this.shoulderY, angle, def, this));
+      const P = def.kind === 'grenade' ? Grenade : Bullet;
+      game.bullets.push(new P(this.shoulderX, this.shoulderY, angle, def, this));
     }
+    this.lastShotTime = game.time;
     // Recul : petite poussée dans le sens opposé au tir
     this.vx -= Math.cos(this.aimAngle) * def.recoil;
     if (!this.grounded) this.vy -= Math.sin(this.aimAngle) * def.recoil * 0.6;
@@ -239,15 +264,19 @@ export class Fighter {
     ctx.fillRect(x + w / 2 + (this.facing === 1 ? 0 : -9), y + 5, 9, 6);
 
     // Arme, orientée vers la visée
-    const shotgun = this.weapon.def.pellets > 1;
-    const len = shotgun ? 22 : 27;
+    const look = GUN_LOOK[this.weapon.def.id] || GUN_LOOK.rifle;
+    const len = look.len;
     ctx.save();
     ctx.translate(this.shoulderX, this.shoulderY);
     ctx.rotate(this.aimAngle);
     ctx.fillStyle = '#a3acbf';
-    ctx.fillRect(0, -3, len, shotgun ? 7 : 5);
-    ctx.fillStyle = shotgun ? '#8c5a2b' : '#3d4356';
-    ctx.fillRect(2, -3, 9, shotgun ? 7 : 5);
+    ctx.fillRect(0, -3, len, look.thick);
+    ctx.fillStyle = look.stock;
+    ctx.fillRect(2, -3, 9, look.thick);
+    if (look.scope) {                       // lunette du sniper
+      ctx.fillStyle = '#1b2440';
+      ctx.fillRect(12, -7, 12, 4);
+    }
     if (this.muzzleFlash > 0) {
       ctx.fillStyle = '#fff3b0';
       ctx.beginPath();

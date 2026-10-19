@@ -55,6 +55,10 @@ export function drawHUD(ctx, game, view) {
   ctx.fillStyle = '#fff';
   ctx.font = font(10 * u);
   ctx.fillText(`PV ${Math.ceil(hp)}`, x + 4 * u, y + bh / 2 + 1);
+  // Bouclier : fine barre bleue par-dessus la vie
+  if (p.shield > 0) {
+    bar(ctx, x, y - 4 * u, bw, 4 * u, p.shield / CONFIG.pickups.shieldAmount, '#4dabf7');
+  }
 
   // Jetpack
   y += bh + 5 * u;
@@ -69,6 +73,12 @@ export function drawHUD(ctx, game, view) {
   ctx.font = font(13 * u);
   ctx.fillStyle = w.def.color;
   ctx.fillText(w.def.name, x, y);
+  // L'autre arme, en petit et grisée
+  const other = p.weapons[1 - p.weaponIndex];
+  const nameW = ctx.measureText(w.def.name).width;
+  ctx.font = font(10 * u, false);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillText(`⇄ ${other.def.name}`, x + nameW + 8 * u, y + 1);
   ctx.fillStyle = '#fff';
   if (w.reloading) {
     ctx.font = font(11 * u);

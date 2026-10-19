@@ -80,10 +80,31 @@ export class BotBrain {
       if (dy < -120) wantUp = true;
     }
 
+    // Objet intéressant à aller chercher (soin si blessé, meilleure arme…)
+    const goal = this.pickGoal(game, visible);
+    let flyTargetY = t ? t.cy : null;
+    if (goal) {
+      const gdx = goal.x - me.cx;
+      if (Math.abs(gdx) > 6) dir = Math.sign(gdx);
+      wantUp = goal.y < me.y + me.h - 30;
+      flyTargetY = goal.y;
+    }
+
+    // Un plafond au-dessus ? Inutile de monter tout droit : on file vers
+    // le bord le plus proche pour le contourner
+    if (wantUp) {
+      const ceil = map.ceilingAbove(me, 220);
+      if (ceil) {
+        dir = (me.cx - ceil.x) < (ceil.x + ceil.w - me.cx) ? -1 : 1;
+        wantUp = false;
+      }
+    }
+
     // Phases de vol : on décolle avec assez de carburant, on arrête
     // quand on est à bonne hauteur ou presque à sec
     if (wantUp && !this.flying && me.fuel > 40) this.flying = true;
-    if (this.flying && (me.fuel < 8 || !wantUp || (t && me.cy < t.cy - 30))) this.flying = false;
+    if (this.flying && (me.fuel < 8 || !wantUp ||
+        (flyTargetY !== null && me.cy < flyTargetY - 30))) this.flying = false;
 
     // Bloqué contre un mur ? On saute / vole par-dessus
     if (Math.abs(me.x - this.lastX) < 0.5) this.stuckTimer += dt;
@@ -125,7 +146,10 @@ export class BotBrain {
     }
 
     cmd.moveX = dir;
-    if (this.flying || this.climbTimer > 0 || (me.grounded && (wantUp || this.crossing))) cmd.up = true;
+    // (au sol, on ne saute vers une cible en hauteur qu'avec assez de carburant
+    //  pour voler ensuite, sinon on rebondit sur place sans jamais recharger)
+    if (this.flying || this.climbTimer > 0 ||
+        (me.grounded && ((wantUp && me.fuel > 40) || this.crossing))) cmd.up = true;
 
     // ---------- 4. Viser ----------
     this.aimTimer -= dt;
@@ -135,7 +159,15 @@ export class BotBrain {
       this.aimTimer = 0.25 + Math.random() * 0.25;
     }
     if (t && visible) {
-      const a = Math.atan2(t.cy - me.shoulderY, t.cx - me.shoulderX) + this.aimOffset;
+      const def = me.weapon.def;
+      let ty = t.cy;
+      if (def.kind === 'grenade') {
+        // Grenade : on vise plus haut pour compenser la chute
+        const flight = dist / def.bulletSpeed;
+        ty -= 0.5 * CONFIG.grenadeGravity * flight * flight;
+      }
+      const precision = def.id === 'sniper' ? 0.5 : 1;   // le sniper vise plus juste
+      const a = Math.atan2(ty - me.shoulderY, t.cx - me.shoulderX) + this.aimOffset * precision;
       this.aim.x = Math.cos(a); this.aim.y = Math.sin(a);
     } else if (dir) {
       this.aim.x = dir; this.aim.y = 0;
@@ -144,10 +176,11 @@ export class BotBrain {
 
     // ---------- 5. Choisir l'arme ----------
     this.switchCooldown -= dt;
-    const isShotgun = me.weapon.def.pellets > 1;
+    // On prend l'arme secondaire si la distance lui convient, sinon le fusil auto
     if (this.switchCooldown <= 0 && visible) {
-      if ((!isShotgun && dist < B.shotgunDistance) ||
-          (isShotgun && dist > B.shotgunDistance * 1.6)) {
+      const [lo, hi] = me.weapons[1].def.botRange;
+      const want = dist >= lo && dist <= hi ? 1 : 0;
+      if (want !== me.weaponIndex) {
         cmd.switchWeapon = true;
         this.switchCooldown = 1.5;
       }
@@ -158,7 +191,8 @@ export class BotBrain {
     const cycle = B.burstTime + B.burstPause;
     if (this.burstTimer > cycle) this.burstTimer -= cycle;
     const inBurst = this.burstTimer < B.burstTime;
-    if (visible && this.seeTimer >= B.reactionTime && inBurst &&
+    const tooCloseForBlast = me.weapon.def.kind === 'grenade' && dist < 110;
+    if (visible && this.seeTimer >= B.reactionTime && inBurst && !tooCloseForBlast &&
         dist < me.weapon.def.range * 0.9) {
       cmd.fire = true;
     }
@@ -168,12 +202,29 @@ export class BotBrain {
     return cmd;
   }
 
+  // Objet à aller chercher, ou null
+  pickGoal(game, targetVisible) {
+    const me = this.f;
+    let wanted = null, maxDist = 0;
+    if (me.health < 45) { wanted = ['health', 'shield']; maxDist = 1200; }
+    else if (!targetVisible && me.weapons[1].def.id === 'shotgun') { wanted = ['weapon']; maxDist = 900; }
+    else if (!targetVisible && me.shield === 0) { wanted = ['shield']; maxDist = 700; }
+    if (!wanted) return null;
+    let best = null, bestD = maxDist;
+    for (const p of game.pickups) {
+      if (!p.active || !wanted.includes(p.type) || !p.usefulFor(me)) continue;
+      const d = Math.hypot(p.x - me.cx, p.y - me.cy);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
   // Ennemi le plus proche (le joueur humain compte un peu plus "près")
   pickTarget(game) {
     const me = this.f;
     let best = null, bestScore = Infinity;
     for (const o of game.fighters) {
-      if (o === me || !o.alive) continue;
+      if (o === me || !o.alive || !game.canHit(me, o)) continue;
       let d = Math.hypot(o.cx - me.cx, o.cy - me.cy);
       if (!o.isBot) d /= CONFIG.bots.playerPreference;
       if (d < bestScore) { bestScore = d; best = o; }

@@ -9,6 +9,7 @@ import { Fighter } from './player.js';
 import { BotBrain } from './bot.js';
 import { Input } from './input.js';
 import { Particle } from './bullet.js';
+import { Pickup } from './pickup.js';
 import { Sound, vibrate } from './audio.js';
 import { drawHUD, drawTouchControls, drawPauseButton, drawMenu,
          menuButtons, hitMenu } from './hud.js';
@@ -31,29 +32,75 @@ const game = {
   fighters: [],
   bots: [],             // { fighter, brain }
   player: null,
-  bullets: [],
+  bullets: [],          // balles ET grenades
   particles: [],
+  pickups: [],
   feed: [],             // fil des éliminations
   time: 0,
   timeLeft: CONFIG.rules.matchDuration,
   sound,
 
+  // Un tir de "tireur" peut-il toucher "cible" ? (jamais soi-même)
+  canHit(shooter, target) {
+    return shooter !== target;
+  },
+
   // Une balle touche quelqu'un
   onBulletHit(target, bullet) {
     game.sparks(bullet.x, bullet.y, target.color, 6);
-    if (target.protectTimer > 0) return;          // invincible après réapparition
-    target.health -= bullet.damage;
+    game.damage(target, bullet.damage, bullet.owner, bullet.vx * 0.02, 0);
+  },
+
+  // Inflige des dégâts (le bouclier encaisse en premier) + petite poussée
+  damage(target, amount, attacker, pushX, pushY) {
+    if (!target.alive || target.protectTimer > 0) return;  // invincible après réapparition
+    if (target.shield > 0) {
+      const absorbed = Math.min(target.shield, amount);
+      target.shield -= absorbed;
+      amount -= absorbed;
+    }
+    target.health -= amount;
     target.hitFlash = 0.12;
-    target.lastAttacker = bullet.owner;
-    target.lastAttackTime = game.time;
-    target.vx += bullet.vx * 0.02;                // petit recul sur la cible
+    target.vx += pushX;
+    target.vy += pushY;
+    if (attacker && attacker !== target) {
+      target.lastAttacker = attacker;
+      target.lastAttackTime = game.time;
+    }
     if (target === game.player) {
       sound.play('hurt');
       vibrate(CONFIG.feedback.vibrateOnHit);
-    } else if (bullet.owner === game.player) {
+    } else if (attacker === game.player) {
       sound.play('hitmark');
     }
-    if (target.health <= 0) killFighter(target, bullet.owner);
+    if (target.health <= 0) killFighter(target, attacker);
+  },
+
+  // Explosion de grenade : dégâts qui diminuent avec la distance,
+  // bloqués par les murs, et souffle qui projette les personnages
+  explode(x, y, def, owner) {
+    const R = def.blastRadius;
+    for (const f of game.fighters) {
+      if (!f.alive) continue;
+      if (f !== owner && !game.canHit(owner, f)) continue;     // pas les coéquipiers
+      const dx = f.cx - x, dy = f.cy - y;
+      const d = Math.hypot(dx, dy);
+      if (d > R + f.w / 2) continue;
+      if (!game.map.lineOfSight(x, y - 4, f.cx, f.cy)) continue;
+      const k = Math.max(0.2, 1 - d / R);
+      const self = f === owner ? 0.5 : 1;       // on se blesse moins soi-même
+      const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : -1;
+      game.damage(f, def.damage * k * self, owner, nx * 650 * k, ny * 650 * k - 150 * k);
+    }
+    game.sparks(x, y, '#ffd43b', 18);
+    game.sparks(x, y, '#ff6b2b', 18);
+    game.sparks(x, y, '#868e96', 10);
+    sound.play('explosion', hearingVolumeAt(x, y));
+  },
+
+  // Quelqu'un ramasse un objet
+  onPickup(f, pickup) {
+    if (f === game.player) sound.play('pickup');
   },
 
   // Petites étincelles
@@ -65,7 +112,7 @@ const game = {
   onFighterEvent(f, name) {
     const vol = hearingVolume(f);
     if (name === 'fire') {
-      sound.play(f.weapon.def.pellets > 1 ? 'shotgun' : 'rifle', vol);
+      sound.play(f.weapon.def.id, vol);          // un son par arme
       if (f === game.player) vibrate(CONFIG.feedback.vibrateOnShoot);
     } else if (f === game.player) {
       sound.play(name);                            // 'reload', 'switch'
@@ -75,8 +122,11 @@ const game = {
 
 // Plus un personnage est loin du joueur, moins on l'entend
 function hearingVolume(f) {
+  return hearingVolumeAt(f.cx, f.cy);
+}
+function hearingVolumeAt(x, y) {
   const p = game.player;
-  const d = Math.hypot(f.cx - p.cx, f.cy - p.cy);
+  const d = Math.hypot(x - p.cx, y - p.cy);
   return Math.max(0, 1 - d / 1100);
 }
 
@@ -151,6 +201,7 @@ function startMatch() {
   });
   game.bullets = [];
   game.particles = [];
+  game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
   game.feed = [];
   game.time = 0;
   game.timeLeft = CONFIG.rules.matchDuration;
@@ -193,6 +244,8 @@ function killFighter(victim, killer) {
     killer.kills++;
     addFeed(`${killer.name}  ✕  ${victim.name}`,
             killer === game.player || victim === game.player);
+  } else if (killer === victim) {
+    addFeed(`${victim.name} s'est fait exploser`, victim === game.player);
   } else {
     addFeed(`${victim.name} est tombé dans le vide`, victim === game.player);
   }
@@ -256,7 +309,8 @@ function update(dt) {
     }
   }
 
-  // 3. Balles et particules
+  // 3. Objets, balles, particules
+  for (const pk of game.pickups) pk.update(dt, game);
   for (const b of game.bullets) b.update(dt, game);
   game.bullets = game.bullets.filter((b) => !b.dead);
   for (const pa of game.particles) pa.update(dt);
@@ -316,6 +370,7 @@ function render() {
     ctx.scale(view.scale, view.scale);
     ctx.translate(-cam.x, -cam.y);
     game.map.draw(ctx, cam);
+    for (const pk of game.pickups) pk.draw(ctx);
     for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
     game.player.draw(ctx);                       // le joueur par-dessus
     for (const b of game.bullets) b.draw(ctx);
@@ -390,9 +445,12 @@ window.__debug = () => ({
   feed: game.feed.map((f) => f.text),
   audio: sound.ctx ? sound.ctx.state : 'aucun',
   timeLeft: game.timeLeft,
+  pickupsActive: game.pickups.filter((p) => p.active).length,
   fighters: game.fighters.map((f) => ({ name: f.name, alive: f.alive, hp: Math.round(f.health),
+    shield: Math.round(f.shield), arme2: f.weapons[1].def.id,
     kills: f.kills, deaths: f.deaths, x: Math.round(f.x), y: Math.round(f.y) })),
 });
+window.__game = game;   // (tests automatiques uniquement)
 
 cam.x = 1000; cam.y = 600;
 requestAnimationFrame(frame);

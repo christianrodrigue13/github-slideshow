@@ -45,11 +45,17 @@ export const CONFIG = {
   },
 
   // --- Armes ---
-  // auto : true = tir continu tant qu'on vise ; pellets = plombs par tir
+  // Chaque personnage porte 2 armes : la principale (toujours le fusil auto)
+  // et une secondaire, que l'on remplace en ramassant une caisse d'arme.
+  // kind : 'bullet' = balles, 'grenade' = projectile qui rebondit et explose
+  // auto : tir continu tant qu'on vise ; pellets = plombs par tir
+  // botRange : distances [min, max] où les bots aiment utiliser l'arme
+  loadout: { primary: 'rifle', secondary: 'shotgun' },
   weapons: [
     {
       id: 'rifle',
       name: 'Fusil auto',
+      kind: 'bullet',
       damage: 9,
       fireRate: 9,           // tirs par seconde
       magazine: 30,
@@ -60,10 +66,12 @@ export const CONFIG = {
       range: 950,
       recoil: 45,            // petite poussée en arrière à chaque tir
       color: '#ffe066',
+      botRange: [0, 900],
     },
     {
       id: 'shotgun',
       name: 'Fusil à pompe',
+      kind: 'bullet',
       damage: 8,             // par plomb
       fireRate: 1.2,
       magazine: 6,
@@ -74,8 +82,53 @@ export const CONFIG = {
       range: 480,
       recoil: 190,
       color: '#ff9f43',
+      botRange: [0, 240],
+    },
+    {
+      id: 'sniper',
+      name: 'Sniper',
+      kind: 'bullet',
+      damage: 70,
+      fireRate: 0.9,
+      magazine: 4,
+      reloadTime: 2.2,
+      spread: 0.004,
+      pellets: 1,
+      bulletSpeed: 3400,
+      range: 1900,
+      recoil: 130,
+      color: '#7df9ff',
+      botRange: [350, 1800],
+    },
+    {
+      id: 'launcher',
+      name: 'Lance-grenades',
+      kind: 'grenade',
+      damage: 85,            // dégâts au centre de l'explosion
+      blastRadius: 125,      // rayon de l'explosion
+      fuse: 1.3,             // secondes avant d'exploser (ou au contact d'un ennemi)
+      fireRate: 1.0,
+      magazine: 3,
+      reloadTime: 2.4,
+      spread: 0.02,
+      pellets: 1,
+      bulletSpeed: 780,      // vitesse de lancer
+      range: 700,
+      recoil: 150,
+      color: '#b2f2bb',
+      botRange: [150, 650],
     },
   ],
+
+  // --- Objets à ramasser ---
+  pickups: {
+    healthAmount: 50,        // PV rendus par une trousse de soin
+    shieldAmount: 50,        // points de bouclier (absorbent les dégâts avant la vie)
+    healthRespawn: 15,       // secondes avant qu'une trousse réapparaisse
+    shieldRespawn: 20,
+    weaponRespawn: 12,
+    crateWeapons: ['sniper', 'launcher', 'shotgun'],  // contenu possible des caisses
+  },
 
   // --- Bots ---
   bots: {
@@ -84,7 +137,6 @@ export const CONFIG = {
     reactionTime: 0.45,      // temps avant de tirer sur une nouvelle cible
     sightRange: 900,         // distance à laquelle ils te repèrent
     preferredDistance: 320,  // distance qu'ils essaient de garder
-    shotgunDistance: 220,    // en dessous, ils sortent le fusil à pompe
     burstTime: 1.0,          // durée d'une rafale
     burstPause: 0.55,        // pause entre deux rafales
     playerPreference: 1.3,   // >1 : les bots s'en prennent un peu plus à toi
@@ -116,8 +168,16 @@ export const CONFIG = {
     volume: 0.5,             // volume général (0 à 1)
   },
 
+  // Gravité appliquée aux grenades
+  grenadeGravity: 1300,
+
   player: {
     name: 'Toi',
     color: '#ffffff',
   },
 };
+
+// Retrouve la définition d'une arme par son identifiant
+export function weaponDef(id) {
+  return CONFIG.weapons.find((w) => w.id === id);
+}

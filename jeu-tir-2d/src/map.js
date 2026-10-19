@@ -64,6 +64,18 @@ export class GameMap {
       { x: 2440, y: 840 }, { x: 1600, y: 380 },
     ];
 
+    // Objets à ramasser : x = centre, y = surface du sol sous l'objet
+    this.pickupSpots = [
+      { x: 1600, y: 1090, type: 'health' },   // sur le bloc central
+      { x: 400, y: 1010, type: 'health' },
+      { x: 2800, y: 1010, type: 'health' },
+      { x: 1600, y: 380, type: 'shield' },    // tout en haut
+      { x: 760, y: 840, type: 'weapon' },
+      { x: 2440, y: 840, type: 'weapon' },
+      { x: 1280, y: 590, type: 'weapon' },
+      { x: 1920, y: 590, type: 'weapon' },
+    ];
+
     // Petits décors d'arrière-plan (purement visuels, générés une fois)
     this.decor = [];
     for (let i = 0; i < 40; i++) {
@@ -102,6 +114,18 @@ export class GameMap {
   // Vrai si rien ne bloque la vue entre deux points
   lineOfSight(x0, y0, x1, y1) {
     return this.raycast(x0, y0, x1, y1) === null;
+  }
+
+  // Solide juste au-dessus de la tête de ce personnage (dans "range" px), ou null
+  ceilingAbove(f, range) {
+    let best = null;
+    for (const s of this.solids) {
+      const bottom = s.y + s.h;
+      if (f.x + f.w > s.x && f.x < s.x + s.w && bottom <= f.y + 1 && bottom > f.y - range) {
+        if (!best || bottom > best.y + best.h) best = s;
+      }
+    }
+    return best;
   }
 
   // Distance jusqu'au premier sol sous le point (x, y). Infinity = le vide.
