@@ -50,18 +50,22 @@ export const CONFIG = {
   // --- Armes ---
   // Chaque personnage porte 2 armes : la principale (toujours le fusil auto)
   // et une secondaire, que l'on remplace en ramassant une caisse d'arme.
-  // kind : 'bullet' = balles, 'grenade' = projectile qui rebondit et explose
-  // auto : tir continu tant qu'on vise ; pellets = plombs par tir
+  // kind : 'bullet' = balles, 'rocket' = roquette qui explose à l'impact,
+  //        'grenade' = projectile qui rebondit puis explose après "fuse" secondes
+  // magazine = balles par chargeur, reserve = munitions de réserve (Infinity = illimité)
+  // pellets = plombs par tir ; knockback = force de projection des explosions
   // botRange : distances [min, max] où les bots aiment utiliser l'arme
   loadout: { primary: 'rifle', secondary: 'shotgun' },
   weapons: [
     {
       id: 'rifle',
+      short: 'AUTO',          // abréviation (caisses d'armes)
       name: 'Fusil auto',
       kind: 'bullet',
       damage: 9,
       fireRate: 9,           // tirs par seconde
       magazine: 30,
+      reserve: 120,
       reloadTime: 1.6,
       spread: 0.045,         // dispersion en radians
       pellets: 1,
@@ -72,12 +76,32 @@ export const CONFIG = {
       botRange: [0, 900],
     },
     {
+      id: 'smg',
+      short: 'PM',          // abréviation (caisses d'armes)
+      name: 'Pistolet-mitrailleur',
+      kind: 'bullet',
+      damage: 6,
+      fireRate: 14,
+      magazine: 36,
+      reserve: 144,
+      reloadTime: 1.3,
+      spread: 0.09,
+      pellets: 1,
+      bulletSpeed: 1500,
+      range: 620,
+      recoil: 22,
+      color: '#a9e34b',
+      botRange: [0, 450],
+    },
+    {
       id: 'shotgun',
+      short: 'POM',          // abréviation (caisses d'armes)
       name: 'Fusil à pompe',
       kind: 'bullet',
       damage: 8,             // par plomb
       fireRate: 1.2,
       magazine: 6,
+      reserve: 18,
       reloadTime: 2.0,
       spread: 0.28,
       pellets: 7,
@@ -89,13 +113,15 @@ export const CONFIG = {
     },
     {
       id: 'sniper',
-      name: 'Sniper',
+      short: 'PRÉ',          // abréviation (caisses d'armes)
+      name: 'Fusil de précision',
       kind: 'bullet',
       damage: 70,
-      fireRate: 0.9,
+      fireRate: 0.8,
       magazine: 4,
-      reloadTime: 2.2,
-      spread: 0.004,
+      reserve: 12,
+      reloadTime: 2.4,
+      spread: 0.003,
       pellets: 1,
       bulletSpeed: 3400,
       range: 1900,
@@ -104,22 +130,45 @@ export const CONFIG = {
       botRange: [350, 1800],
     },
     {
-      id: 'launcher',
-      name: 'Lance-grenades',
+      id: 'rocket',
+      short: 'ROQ',          // abréviation (caisses d'armes)
+      name: 'Lance-roquettes',
+      kind: 'rocket',
+      damage: 95,            // dégâts au centre de l'explosion
+      blastRadius: 115,      // rayon de l'explosion
+      knockback: 950,        // forte projection
+      fireRate: 0.7,
+      magazine: 1,
+      reserve: 5,
+      reloadTime: 2.0,
+      spread: 0.01,
+      pellets: 1,
+      bulletSpeed: 950,
+      range: 1500,
+      recoil: 170,
+      color: '#ff8787',
+      botRange: [180, 900],
+    },
+    {
+      id: 'grenade',
+      short: 'GRE',          // abréviation (caisses d'armes)
+      name: 'Grenades',
       kind: 'grenade',
-      damage: 85,            // dégâts au centre de l'explosion
-      blastRadius: 125,      // rayon de l'explosion
-      fuse: 1.3,             // secondes avant d'exploser (ou au contact d'un ennemi)
-      fireRate: 1.0,
-      magazine: 3,
-      reloadTime: 2.4,
+      damage: 90,
+      blastRadius: 135,
+      knockback: 700,
+      fuse: 1.8,             // explosion retardée (secondes après le lancer)
+      fireRate: 1.2,
+      magazine: 1,           // une grenade en main…
+      reserve: 4,            // … et 4 dans la poche
+      reloadTime: 0.5,       // temps pour prendre la grenade suivante
       spread: 0.02,
       pellets: 1,
-      bulletSpeed: 780,      // vitesse de lancer
-      range: 700,
-      recoil: 150,
+      bulletSpeed: 680,      // vitesse de lancer
+      range: 600,
+      recoil: 0,
       color: '#b2f2bb',
-      botRange: [150, 650],
+      botRange: [120, 550],
     },
   ],
 
@@ -130,7 +179,14 @@ export const CONFIG = {
     healthRespawn: 15,       // secondes avant qu'une trousse réapparaisse
     shieldRespawn: 20,
     weaponRespawn: 12,
-    crateWeapons: ['sniper', 'launcher', 'shotgun'],  // contenu possible des caisses
+    ammoRespawn: 12,         // une caisse de munitions remplit la réserve des 2 armes
+    crateWeapons: ['smg', 'shotgun', 'sniper', 'rocket', 'grenade'],  // contenu possible des caisses
+  },
+
+  // --- Mode Roi de la colline ---
+  hill: {
+    pointsPerSecond: 1,      // points gagnés par seconde seul dans la zone
+    target: 60,              // le premier à ce score gagne (sinon : le meilleur à la fin du temps)
   },
 
   // --- Bots ---

@@ -9,7 +9,7 @@ import { CONFIG, weaponDef } from './config.js';
 export class Pickup {
   // spot = { x, y, type } : x = centre, y = surface du sol sous l'objet
   constructor(spot) {
-    this.type = spot.type;            // 'health' | 'shield' | 'weapon'
+    this.type = spot.type;            // 'health' | 'shield' | 'ammo' | 'weapon'
     this.x = spot.x;
     this.y = spot.y - 22;             // l'objet flotte un peu au-dessus du sol
     this.size = 26;
@@ -30,6 +30,7 @@ export class Pickup {
     const P = CONFIG.pickups;
     if (this.type === 'health') return P.healthRespawn;
     if (this.type === 'shield') return P.shieldRespawn;
+    if (this.type === 'ammo') return P.ammoRespawn;
     return P.weaponRespawn;
   }
 
@@ -37,6 +38,7 @@ export class Pickup {
   usefulFor(f) {
     if (this.type === 'health') return f.health < CONFIG.fighter.maxHealth;
     if (this.type === 'shield') return f.shield < CONFIG.pickups.shieldAmount;
+    if (this.type === 'ammo') return f.weapons.some((w) => w.reserve < (w.def.reserve ?? Infinity));
     return f.weapons[1].def.id !== this.weaponId;
   }
 
@@ -48,6 +50,8 @@ export class Pickup {
       f.health = Math.min(CONFIG.fighter.maxHealth, f.health + P.healthAmount);
     } else if (this.type === 'shield') {
       f.shield = P.shieldAmount;
+    } else if (this.type === 'ammo') {
+      for (const w of f.weapons) w.restock();
     } else {
       f.giveSecondary(this.weaponId);
     }
@@ -110,6 +114,13 @@ export class Pickup {
       ctx.fill();
       ctx.fillStyle = '#a5d8ff';
       ctx.fillRect(this.x - 2, y0 + 6, 4, s - 12);
+    } else if (this.type === 'ammo') {
+      ctx.fillStyle = '#5c7a3d';                       // caisse verte de munitions
+      ctx.fillRect(x0 - 2, y0 + 4, s + 4, s - 4);
+      ctx.fillStyle = '#e0b44c';                       // trois cartouches
+      for (let i = 0; i < 3; i++) ctx.fillRect(x0 + 4 + i * 7, y0 - 2, 4, 12);
+      ctx.fillStyle = '#2b3a1f';
+      ctx.fillRect(x0 + 2, y0 + 14, s - 4, 3);
     } else {
       const def = weaponDef(this.weaponId);
       ctx.fillStyle = '#8d6e4a';                       // caisse en bois
@@ -118,10 +129,10 @@ export class Pickup {
       ctx.lineWidth = 2;
       ctx.strokeRect(x0 - 1, y0 + 1, s + 2, s - 2);
       ctx.fillStyle = def.color;                       // initiale de l'arme
-      ctx.font = 'bold 14px system-ui, sans-serif';
+      ctx.font = 'bold 10px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(def.name[0], this.x, y + 1);
+      ctx.fillText(def.short, this.x, y + 1);
     }
   }
 }

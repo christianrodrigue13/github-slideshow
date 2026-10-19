@@ -19,7 +19,7 @@ const SETTING_ROWS = [
   { key: 'bots', label: 'Bots' },
 ];
 
-export const MODE_NAMES = { ffa: 'Chacun pour soi', teams: 'Équipes' };
+export const MODE_NAMES = { ffa: 'Chacun pour soi', teams: 'Équipes', hill: 'Roi de la colline' };
 
 function settingValue(key, settings) {
   if (key === 'map') return MAPS[settings.map].name;
@@ -226,6 +226,8 @@ export function drawMenu(ctx, state, view, m) {
     ctx.textAlign = 'right';
     ctx.fillText('Éliminations', x0 + tw - 90 * u, y);
     ctx.fillText('Morts', x0 + tw - 8, y);
+    const hill = game.mode === 'hill';
+    if (hill) ctx.fillText('Points', x0 + tw - 190 * u, y);
     rows.forEach((f, i) => {
       y += rowH;
       if (f === game.player) {
@@ -242,6 +244,10 @@ export function drawMenu(ctx, state, view, m) {
       ctx.fillStyle = '#fff';
       ctx.fillText(String(f.kills), x0 + tw - 90 * u, y);
       ctx.fillText(String(f.deaths), x0 + tw - 8, y);
+      if (hill) {
+        ctx.fillStyle = '#ffe066';
+        ctx.fillText(String(Math.floor(f.hillPoints)), x0 + tw - 190 * u, y);
+      }
     });
   }
 

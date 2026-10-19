@@ -19,7 +19,12 @@ export const game = {
   settings: null,       // réglages de la partie (carte, mode, difficulté, bots)
   options: null,        // options du joueur (vibrations, tremblement…)
   sound: null,          // le module de son (fourni par main.js)
+  mode: 'ffa',          // 'ffa' (chacun pour soi) | 'teams' | 'hill' (roi de la colline)
   teams: false,         // vrai en mode équipes
+  hill: null,           // zone de la colline {x, y, w, h} (mode 'hill')
+  hillOwner: null,      // qui marque des points dans la zone en ce moment
+  hillContested: false, // plusieurs personnages dans la zone
+  stats: null,          // statistiques du joueur pendant la partie (missions, XP)
   fighters: [],
   bots: [],             // { fighter, brain }
   player: null,
@@ -46,11 +51,12 @@ export const game = {
   // Une balle touche quelqu'un
   onBulletHit(target, bullet) {
     game.sparks(bullet.x, bullet.y, target.color, 6);
-    game.damage(target, bullet.damage, bullet.owner, bullet.vx * 0.02, 0);
+    game.damage(target, bullet.damage, bullet.owner, bullet.vx * 0.02, 0, bullet.weaponId);
   },
 
-  // Inflige des dégâts (le bouclier encaisse en premier) + petite poussée
-  damage(target, amount, attacker, pushX, pushY) {
+  // Inflige des dégâts (le bouclier encaisse en premier) + petite poussée.
+  // weaponId : l'arme utilisée (statistiques, missions)
+  damage(target, amount, attacker, pushX, pushY, weaponId = null) {
     if (!target.alive || target.protectTimer > 0) return;  // invincible après réapparition
     if (attacker && attacker.isBot) amount *= CONFIG.difficulties[game.settings.difficulty].damage;
     const total = amount;
@@ -68,6 +74,7 @@ export const game = {
     if (attacker && attacker !== target) {
       target.lastAttacker = attacker;
       target.lastAttackTime = game.time;
+      target.lastHitWeapon = weaponId;
     }
     if (attacker === game.player && target !== game.player) addFloater(target, total, absorbedTotal);
     if (target === game.player && attacker && attacker !== target) {
@@ -104,7 +111,8 @@ export const game = {
       const k = Math.max(0.2, 1 - d / R);
       const self = f === owner ? 0.5 : 1;       // on se blesse moins soi-même
       const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : -1;
-      game.damage(f, def.damage * k * self, owner, nx * 650 * k, ny * 650 * k - 150 * k);
+      const push = (def.knockback ?? 650) * k;
+      game.damage(f, def.damage * k * self, owner, nx * push, ny * push - 150 * k, def.id);
     }
     // Effets : onde de choc, flammes, éclats, fumée, tremblement d'écran
     const fx = game.effects;
@@ -120,7 +128,10 @@ export const game = {
 
   // Quelqu'un ramasse un objet
   onPickup(f, pickup) {
-    if (f === game.player) game.sound.play('pickup');
+    if (f === game.player) {
+      game.sound.play('pickup');
+      game.stats.pickups++;
+    }
   },
 
   // Petites étincelles (opts : voir effects.js)
@@ -156,7 +167,7 @@ export const game = {
         pa.vy = -160 - Math.random() * 60;
       }
     } else if (f === game.player) {
-      game.sound.play(name);                     // 'reload', 'switch'
+      game.sound.play(name);                     // 'reload', 'switch', 'empty'
     }
   },
 };
@@ -180,8 +191,24 @@ function hearingVolumeAt(x, y) {
 }
 
 // Classement : plus d'éliminations d'abord, puis moins de morts
+// (Roi de la colline : d'abord les points de colline)
 export function ranking(fighters) {
-  return [...fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  const hill = game.mode === 'hill';
+  return [...fighters].sort((a, b) =>
+    (hill ? b.hillPoints - a.hillPoints : 0) || b.kills - a.kills || a.deaths - b.deaths);
+}
+
+// Le joueur a-t-il gagné ? (équipes : son équipe ; sinon : premier, égalité comprise)
+export function playerWon() {
+  if (!game.player) return false;
+  if (game.teams) {
+    const [s0, s1] = teamScores(game.fighters);
+    return s0 > s1;
+  }
+  const best = ranking(game.fighters)[0];
+  if (best === game.player) return true;
+  return game.mode === 'hill' ? best.hillPoints === game.player.hillPoints && best.hillPoints > 0
+                              : best.kills === game.player.kills && best.kills > 0;
 }
 
 // Total des éliminations de chaque équipe : [équipe 0, équipe 1]
@@ -197,7 +224,13 @@ export function teamScores(fighters) {
 export function startMatch(settings) {
   game.settings = settings;
   game.map = new GameMap(MAPS[settings.map]);
+  game.mode = settings.mode;
   game.teams = settings.mode === 'teams';
+  game.hill = settings.mode === 'hill' ? game.map.hill : null;
+  game.hillOwner = null;
+  game.hillContested = false;
+  game.stats = { kills: 0, deaths: 0, streak: 0, bestStreak: 0, weaponKills: {},
+                 explosiveKills: 0, airKills: 0, pickups: 0, hillTime: 0 };
   game.player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color, team: 0 });
   game.fighters = [game.player];
   game.bots = [];
@@ -220,6 +253,7 @@ export function startMatch(settings) {
   game.fighters.forEach((f, i) => {
     f.respawn(spawns[i % spawns.length]);
     f.protectTimer = 0;
+    f.hillPoints = 0;
   });
   clearMatch();
   game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
@@ -275,6 +309,22 @@ function killFighter(victim, killer) {
   for (let i = 0; i < 3; i++) fx.smoke(victim.cx, victim.cy, 10);
   if (victim === game.player) game.addShake(CONFIG.feel.shakeDeath);
   if (killer === game.player && victim !== game.player) game.slowmo = CONFIG.feel.slowmoDuration;
+
+  // Statistiques du joueur (missions, XP, écran Statistiques)
+  const st = game.stats;
+  if (victim === game.player) {
+    st.deaths++;
+    st.streak = 0;
+  }
+  if (killer === game.player && victim !== game.player) {
+    const weapon = victim.lastHitWeapon || game.player.weapon.def.id;
+    st.kills++;
+    st.streak++;
+    st.bestStreak = Math.max(st.bestStreak, st.streak);
+    st.weaponKills[weapon] = (st.weaponKills[weapon] || 0) + 1;
+    if (weapon === 'rocket' || weapon === 'grenade') st.explosiveKills++;
+    if (!game.player.grounded) st.airKills++;
+  }
 
   if (killer && killer !== victim) {
     killer.kills++;
@@ -360,6 +410,9 @@ export function updateMatch(dt, playerCmd) {
   game.bullets = game.bullets.filter((b) => !b.dead);
   game.effects.update(dt);
 
+  // Roi de la colline : celui qui est SEUL dans la zone marque des points
+  if (game.hill && updateHill(dt)) return true;
+
   // Fumée qui s'échappe des jetpacks
   for (const f of game.fighters) {
     if (f.alive && f.jetting && Math.random() < 0.45) {
@@ -372,6 +425,31 @@ export function updateMatch(dt, playerCmd) {
   game.floaters = game.floaters.filter((fl) => fl.life > 0);
   for (const hm of game.hitMarks) hm.life -= dt;
   game.hitMarks = game.hitMarks.filter((hm) => hm.life > 0);
+  return false;
+}
+
+// Renvoie true si quelqu'un atteint le score à atteindre
+function updateHill(dt) {
+  const z = game.hill;
+  let inside = null, count = 0;
+  for (const f of game.fighters) {
+    if (!f.alive) continue;
+    if (f.x < z.x + z.w && f.x + f.w > z.x && f.y < z.y + z.h && f.y + f.h > z.y) {
+      inside = f;
+      count++;
+    }
+  }
+  game.hillContested = count > 1;
+  game.hillOwner = count === 1 ? inside : null;
+  if (game.hillOwner) {
+    const o = game.hillOwner;
+    o.hillPoints += CONFIG.hill.pointsPerSecond * dt;
+    if (o === game.player) game.stats.hillTime += dt;
+    if (o.hillPoints >= CONFIG.hill.target) {
+      o.hillPoints = CONFIG.hill.target;
+      return true;
+    }
+  }
   return false;
 }
 

@@ -29,6 +29,9 @@ export class BotBrain {
     this.climbTimer = 0;        // vol forcé pour passer un obstacle
     this.lastSeen = -99;        // dernier moment où la cible était visible
     this.ignoreGoalsUntil = 0;  // objets ignorés jusqu'à ce moment
+    this.ceilDir = 1;           // côté choisi pour contourner un plafond
+    this.ceilRect = null;
+    this.ceilTimer = 0;
   }
 
   // Appelée à chaque réapparition
@@ -93,26 +96,44 @@ export class BotBrain {
     // Objet intéressant à aller chercher (soin si blessé, meilleure arme…)
     const goal = this.pickGoal(game, visible);
     let flyTargetY = t ? t.cy : null;
-    if (goal) {
+    // (dans la zone de colline, on ne fonce plus vers son centre : on se bat sur place)
+    const inHill = goal && goal.type === 'hill' && this.insideHill(game.hill);
+    if (goal && !inHill) {
       const gdx = goal.x - me.cx;
       if (Math.abs(gdx) > 6) dir = Math.sign(gdx);
       wantUp = goal.y < me.y + me.h - 30;
       flyTargetY = goal.y;
     }
 
-    // Un plafond au-dessus ? Inutile de monter tout droit : on file vers
-    // le bord le plus proche pour le contourner
+    // Un plafond au-dessus ? Inutile de monter tout droit : on le contourne
+    // par le bord situé du côté de l'objectif (ou le plus proche si
+    // l'objectif est juste au-dessus du plafond)
+    // Le côté choisi est gardé un moment (sinon on hésite au milieu), et en
+    // l'air on garde son altitude pendant le contournement au lieu de tomber.
+    let hover = false;
+    if (this.ceilTimer > 0) this.ceilTimer -= dt;
     if (wantUp) {
       const ceil = map.ceilingAbove(me, 220);
       if (ceil) {
-        dir = (me.cx - ceil.x) < (ceil.x + ceil.w - me.cx) ? -1 : 1;
+        if (this.ceilTimer <= 0 || this.ceilRect !== ceil) {
+          const aimX = goal && !inHill ? goal.x : (t ? t.cx : me.cx);
+          if (aimX < ceil.x) this.ceilDir = -1;
+          else if (aimX > ceil.x + ceil.w) this.ceilDir = 1;
+          else this.ceilDir = (me.cx - ceil.x) < (ceil.x + ceil.w - me.cx) ? -1 : 1;
+          this.ceilRect = ceil;
+          this.ceilTimer = 1.2;
+        }
+        dir = this.ceilDir;
         wantUp = false;
+        hover = !me.grounded && me.fuel > 15;
       }
     }
 
     // Phases de vol : on décolle avec assez de carburant, on arrête
     // quand on est à bonne hauteur ou presque à sec
-    if (wantUp && !this.flying && me.fuel > 40) this.flying = true;
+    // (en l'air, on peut relancer le jetpack même avec peu de carburant : mieux
+    //  vaut finir le vol que tomber dans le vide)
+    if (wantUp && !this.flying && me.fuel > (me.grounded ? 40 : 12)) this.flying = true;
     if (this.flying && (me.fuel < 8 || !wantUp ||
         (flyTargetY !== null && me.cy < flyTargetY - 30))) this.flying = false;
 
@@ -148,13 +169,20 @@ export class BotBrain {
         if (towardGoal) this.ignoreGoalsUntil = game.time + 3;
       }
     }
+    // Vol volontaire vers un objectif plus haut (ex. la colline au-dessus d'un
+    // gouffre) : tant qu'il reste du carburant, on ne l'interrompt pas
+    // (de même si l'objectif est juste en dessous et tout proche : en descendant
+    //  vers lui on atterrira dessus, pas dans le vide)
+    const goalAbove = goal && goal.y < feet - 30 && me.fuel > 25;
+    const goalJustBelow = goal && feet <= goal.y + 15 && Math.abs(goal.x - me.cx) < 450 && me.fuel > 10;
+    const flyingToGoal = goal && !inHill && (goalAbove || goalJustBelow);
     // En l'air : ne pas s'avancer au-dessus d'un trou (sauf traversée voulue).
     // On regarde deux points devant : une fente étroite se survole sans risque.
-    if (!me.grounded && !this.crossing && map.groundBelow(aheadX, feet) === Infinity &&
+    if (!me.grounded && !this.crossing && !flyingToGoal && map.groundBelow(aheadX, feet) === Infinity &&
         map.groundBelow(aheadX + dir * 70, feet) === Infinity) {
       dir = this.nearestGroundDir(map, me.cx, feet) || -dir;
     }
-    if (!me.grounded && map.groundBelow(me.cx, feet) === Infinity) {
+    if (!me.grounded && !flyingToGoal && map.groundBelow(me.cx, feet) === Infinity) {
       if (this.crossing && me.fuel > 15) {
         dir = this.crossDir;                         // on continue la traversée
         cmd.up = me.vy > -50;                        // en gardant l'altitude
@@ -171,7 +199,8 @@ export class BotBrain {
     // (au sol, on ne saute vers une cible en hauteur qu'avec assez de carburant
     //  pour voler ensuite, sinon on rebondit sur place sans jamais recharger)
     if (this.flying || this.climbTimer > 0 ||
-        (me.grounded && ((wantUp && me.fuel > 40) || this.crossing))) cmd.up = true;
+        (me.grounded && ((wantUp && me.fuel > (goal ? 60 : 40)) || this.crossing))) cmd.up = true;
+    if (hover && me.vy > -20) cmd.up = true;          // garder l'altitude sous un plafond
 
     // ---------- 4. Viser ----------
     this.aimTimer -= dt;
@@ -199,9 +228,11 @@ export class BotBrain {
     // ---------- 5. Choisir l'arme ----------
     this.switchCooldown -= dt;
     // On prend l'arme secondaire si la distance lui convient, sinon le fusil auto
+    // (et jamais une arme vide si l'autre a encore des munitions)
     if (this.switchCooldown <= 0 && visible) {
       const [lo, hi] = me.weapons[1].def.botRange;
-      const want = dist >= lo && dist <= hi ? 1 : 0;
+      let want = dist >= lo && dist <= hi ? 1 : 0;
+      if (me.weapons[want].empty && !me.weapons[1 - want].empty) want = 1 - want;
       if (want !== me.weaponIndex) {
         cmd.switchWeapon = true;
         this.switchCooldown = 1.5;
@@ -213,13 +244,18 @@ export class BotBrain {
     const cycle = B.burstTime + B.burstPause;
     if (this.burstTimer > cycle) this.burstTimer -= cycle;
     const inBurst = this.burstTimer < B.burstTime;
-    const tooCloseForBlast = me.weapon.def.kind === 'grenade' && dist < 110;
+    const tooCloseForBlast = me.weapon.def.kind !== 'bullet' && dist < 130;   // explosifs : pas à bout portant
     if (visible && this.seeTimer >= this.skill.reactionTime && inBurst && !tooCloseForBlast &&
         dist < me.weapon.def.range * 0.9) {
       cmd.fire = true;
     }
     // Recharge au calme
     if (!visible && me.weapon.ammo < me.weapon.def.magazine * 0.4) cmd.reload = true;
+    // Arme vide : on passe à l'autre
+    if (me.weapon.empty && !me.weapons[1 - me.weaponIndex].empty && this.switchCooldown <= 0) {
+      cmd.switchWeapon = true;
+      this.switchCooldown = 0.5;
+    }
 
     this.lastCmd = cmd;         // (gardée pour le débogage)
     return cmd;
@@ -229,8 +265,11 @@ export class BotBrain {
   pickGoal(game, targetVisible) {
     const me = this.f;
     if (game.time < this.ignoreGoalsUntil) return null;
+    const lowAmmo = me.weapons[0].ammoRatio < 0.3 && me.weapons[1].ammoRatio < 0.3;
     let wanted = null, maxDist = 0;
     if (me.health < 45) { wanted = ['health', 'shield']; maxDist = 1200; }
+    else if (lowAmmo) { wanted = ['ammo']; maxDist = 1500; }
+    else if (game.hill) return this.hillGoal(game.hill);        // Roi de la colline : la zone d'abord
     else if (!targetVisible && me.weapons[1].def.id === 'shotgun') { wanted = ['weapon']; maxDist = 900; }
     else if (!targetVisible && me.shield === 0) { wanted = ['shield']; maxDist = 700; }
     if (!wanted) return null;
@@ -241,6 +280,19 @@ export class BotBrain {
       if (d < bestD) { bestD = d; best = p; }
     }
     return best;
+  }
+
+  // Objectif "colline" : le milieu du bas de la zone (là où l'on se tient)
+  hillGoal(z) {
+    const g = this.hillTarget || (this.hillTarget = { type: 'hill', x: 0, y: 0 });
+    g.x = z.x + z.w / 2;
+    g.y = z.y + z.h - 10;
+    return g;
+  }
+
+  insideHill(z) {
+    const me = this.f;
+    return z && me.cx > z.x + 20 && me.cx < z.x + z.w - 20 && me.y < z.y + z.h && me.y + me.h > z.y;
   }
 
   // Ennemi le plus proche (le joueur humain compte un peu plus "près")

@@ -61,7 +61,10 @@ export const MAPS = [
       P(1600, 1090, 'health'), P(400, 1010, 'health'), P(2800, 1010, 'health'),
       P(1600, 380, 'shield'),
       P(760, 840, 'weapon'), P(2440, 840, 'weapon'), P(1280, 590, 'weapon'), P(1920, 590, 'weapon'),
+      P(700, 1200, 'ammo'), P(2500, 1200, 'ammo'),
     ],
+    // Zone du mode Roi de la colline : au-dessus de la plateforme centrale
+    hill: R(1440, 640, 320, 130),
   },
   {
     id: 'canyon',
@@ -90,7 +93,11 @@ export const MAPS = [
       P(450, 1080, 'health'), P(3150, 1080, 'health'), P(1800, 700, 'health'),
       P(1800, 330, 'shield'),
       P(1060, 780, 'weapon'), P(2540, 780, 'weapon'), P(750, 560, 'weapon'), P(2850, 560, 'weapon'),
+      P(1100, 1300, 'ammo'), P(2500, 1300, 'ammo'),
     ],
+    // Zone de colline : le rocher flottant du milieu, au-dessus du gouffre
+    // (atteignable d'un seul vol depuis les îlots voisins)
+    hill: R(1690, 930, 220, 130),
   },
   {
     id: 'tours',
@@ -125,7 +132,10 @@ export const MAPS = [
       P(180, 1250, 'health'), P(2220, 1250, 'health'), P(1200, 1350, 'health'),
       P(1200, 1050, 'shield'),
       P(685, 500, 'weapon'), P(1715, 500, 'weapon'), P(950, 850, 'weapon'), P(1450, 850, 'weapon'),
+      P(700, 1800, 'ammo'), P(1700, 1800, 'ammo'),
     ],
+    // Zone de colline : la structure centrale flottante
+    hill: R(1030, 1210, 340, 140),
   },
 ];
 
@@ -139,6 +149,7 @@ export class GameMap {
     this.solids = def.solids;
     this.spawns = def.spawns;
     this.pickupSpots = def.pickups;
+    this.hill = def.hill;             // zone du mode Roi de la colline
     this.theme = THEMES[def.theme];
 
     // Décor généré une fois (purement visuel) ; graine fixe → même décor à chaque partie

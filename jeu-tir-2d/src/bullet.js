@@ -1,8 +1,8 @@
 // =====================================================================
-// bullet.js — Les balles et les petites particules (étincelles, sang
-// stylisé). Les balles vont très vite : à chaque mise à jour on trace
-// un segment entre l'ancienne et la nouvelle position, et on regarde
-// ce qu'il touche en premier (mur ou personnage). Aucune traversée.
+// bullet.js — Les projectiles : balles, roquettes, grenades.
+// Balles et roquettes vont vite : à chaque mise à jour on trace un
+// segment entre l'ancienne et la nouvelle position, et on regarde ce
+// qu'il touche en premier (mur ou personnage). Aucune traversée.
 // =====================================================================
 
 import { segmentVsRect } from './map.js';
@@ -14,6 +14,7 @@ export class Bullet {
     this.vx = Math.cos(angle) * def.bulletSpeed;
     this.vy = Math.sin(angle) * def.bulletSpeed;
     this.damage = def.damage;
+    this.weaponId = def.id;                      // pour les statistiques et missions
     this.color = def.color;
     this.owner = owner;                          // qui a tiré
     this.life = def.range / def.bulletSpeed;     // durée de vie (portée)
@@ -77,8 +78,62 @@ export class Bullet {
   }
 }
 
+// --- Roquette : file tout droit et explose au premier contact
+// (mur ou ennemi), avec une traînée de fumée ---
+export class Rocket {
+  constructor(x, y, angle, def, owner) {
+    this.x = x; this.y = y;
+    this.angle = angle;
+    this.vx = Math.cos(angle) * def.bulletSpeed;
+    this.vy = Math.sin(angle) * def.bulletSpeed;
+    this.def = def;
+    this.owner = owner;
+    this.life = def.range / def.bulletSpeed;
+    this.dead = false;
+  }
+
+  update(dt, game) {
+    this.life -= dt;
+    const nx = this.x + this.vx * dt, ny = this.y + this.vy * dt;
+    let bestT = game.map.raycast(this.x, this.y, nx, ny);
+    for (const f of game.fighters) {
+      if (!f.alive || !game.canHit(this.owner, f)) continue;
+      const t = segmentVsRect(this.x, this.y, nx, ny, f);
+      if (t !== null && (bestT === null || t < bestT)) bestT = t;
+    }
+    if (bestT !== null || this.life <= 0 || ny > game.map.killY) {
+      // point d'impact, légèrement en retrait du mur pour que le souffle passe
+      const t = bestT === null ? 1 : Math.max(0, bestT - 0.05);
+      this.x += (nx - this.x) * t;
+      this.y += (ny - this.y) * t;
+      this.dead = true;
+      if (this.y <= game.map.killY) game.explode(this.x, this.y, this.def, this.owner);
+      return;
+    }
+    this.x = nx; this.y = ny;
+    if (Math.random() < 0.6) game.effects.smoke(this.x - this.vx * 0.02, this.y - this.vy * 0.02, 4);
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = '#ffd43b';                    // flamme
+    ctx.beginPath();
+    ctx.moveTo(-8, -3); ctx.lineTo(-16 - Math.random() * 8, 0); ctx.lineTo(-8, 3);
+    ctx.fill();
+    ctx.fillStyle = '#dee2e6';                    // corps
+    ctx.fillRect(-8, -3, 14, 6);
+    ctx.fillStyle = this.def.color;               // ogive
+    ctx.beginPath();
+    ctx.moveTo(6, -3); ctx.lineTo(11, 0); ctx.lineTo(6, 3);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 // --- Grenade : projectile soumis à la gravité, qui rebondit sur les murs
-// et explose au bout de quelques instants ou au contact d'un ennemi ---
+// et explose au bout de quelques instants (def.fuse) ---
 export class Grenade {
   constructor(x, y, angle, def, owner) {
     this.x = x; this.y = y;
@@ -117,11 +172,13 @@ export class Grenade {
       }
     }
 
-    // Contact direct avec un ennemi → explosion immédiate
-    for (const f of game.fighters) {
-      if (!f.alive || !game.canHit(this.owner, f)) continue;
-      if (this.x > f.x && this.x < f.x + f.w && this.y > f.y && this.y < f.y + f.h) {
-        this.fuse = 0;
+    // Option : explosion au contact d'un ennemi (sinon, seulement après le délai)
+    if (this.def.contactFuse) {
+      for (const f of game.fighters) {
+        if (!f.alive || !game.canHit(this.owner, f)) continue;
+        if (this.x > f.x && this.x < f.x + f.w && this.y > f.y && this.y < f.y + f.h) {
+          this.fuse = 0;
+        }
       }
     }
 

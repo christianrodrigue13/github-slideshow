@@ -5,7 +5,7 @@
 // =====================================================================
 
 import { CONFIG } from './config.js';
-import { unit, font, bar, formatTime } from './ui.js';
+import { unit, font, bar, formatTime, roundedPath } from './ui.js';
 import { ranking, teamScores } from './match.js';
 
 // ---------------------------------------------------------------------
@@ -21,6 +21,13 @@ export function drawHUD(ctx, game, view, pp) {
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
+
+  // Fonds sombres discrets : le texte reste lisible même sur un ciel clair
+  ctx.fillStyle = 'rgba(10,14,28,0.35)';
+  roundedPath(ctx, x - 6 * u, 4 * u, bw + 70 * u, 84 * u, 8 * u);
+  ctx.fill();
+  roundedPath(ctx, view.w / 2 - 150 * u, 4 * u, 300 * u, 50 * u, 8 * u);
+  ctx.fill();
 
   // Vie
   const hp = p.alive ? p.health : 0;
@@ -57,10 +64,20 @@ export function drawHUD(ctx, game, view, pp) {
     ctx.font = font(11 * u);
     ctx.fillText('Rechargement…', x, y + 16 * u);
     bar(ctx, x, y + 25 * u, bw * 0.7, 4 * u, w.reloadProgress, '#ffd43b');
+  } else if (w.empty) {
+    ctx.font = font(15 * u);
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillText('VIDE — cherche des munitions', x, y + 17 * u);
   } else {
+    // Chargeur en gros, réserve en petit
     ctx.font = font(16 * u);
     ctx.fillStyle = w.ammo === 0 ? '#ff6b6b' : '#fff';
-    ctx.fillText(`${w.ammo} / ${w.def.magazine}`, x, y + 17 * u);
+    const txt = String(w.ammo);
+    ctx.fillText(txt, x, y + 17 * u);
+    const tw = ctx.measureText(txt).width;
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = w.reserve === 0 ? '#ff8787' : 'rgba(255,255,255,0.6)';
+    ctx.fillText(`/ ${w.reserve === Infinity ? '∞' : w.reserve}`, x + tw + 5 * u, y + 18 * u);
   }
 
   // Chrono + score au centre en haut
@@ -87,6 +104,21 @@ export function drawHUD(ctx, game, view, pp) {
     ctx.fillStyle = T.colors[1];
     ctx.fillText(right, cx + 10 * u, 42 * u);
     ctx.textAlign = 'center';
+  } else if (game.mode === 'hill') {
+    // Roi de la colline : mes points, ceux du meilleur, et l'état de la zone
+    const best = ranking(game.fighters)[0];
+    const target = CONFIG.hill.target;
+    let status = `Toi ${Math.floor(p.hillPoints)}/${target}`;
+    if (best !== p) status += `   ·   ${best.name} ${Math.floor(best.hillPoints)}`;
+    ctx.fillText(status, cx, 42 * u);
+    let msg = null, color = '#fff';
+    if (game.hillOwner === p) { msg = 'Tu tiens la colline !'; color = '#ffe066'; }
+    else if (game.hillContested) { msg = 'Colline disputée !'; color = '#ff922b'; }
+    if (msg) {
+      ctx.font = font(13 * u);
+      ctx.fillStyle = color;
+      ctx.fillText(msg, cx, view.h * 0.22);
+    }
   } else {
     const rank = ranking(game.fighters).indexOf(p) + 1;
     ctx.fillText(`Éliminations : ${p.kills}   ·   Place : ${rank}/${game.fighters.length}`,
@@ -183,9 +215,17 @@ function drawMinimap(ctx, game, view, u) {
   for (const sd of map.solids) {
     ctx.fillRect(x0 + sd.x * k, y0 + sd.y * k, Math.max(1, sd.w * k), Math.max(1, sd.h * k));
   }
+  if (game.hill) {
+    const z = game.hill;
+    ctx.fillStyle = game.hillContested ? '#ff922b' : '#ffe066';
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(x0 + z.x * k, y0 + z.y * k, Math.max(3, z.w * k), Math.max(3, z.h * k));
+    ctx.globalAlpha = 1;
+  }
+  const PK_COLORS = { health: '#ff8787', shield: '#74c0fc', ammo: '#8ce99a', weapon: '#e0b44c' };
   for (const pk of game.pickups) {
     if (!pk.active) continue;
-    ctx.fillStyle = pk.type === 'health' ? '#ff8787' : pk.type === 'shield' ? '#74c0fc' : '#e0b44c';
+    ctx.fillStyle = PK_COLORS[pk.type];
     ctx.fillRect(x0 + pk.x * k - 1.5, y0 + pk.y * k - 1.5, 3, 3);
   }
   const dot = (f, color, r) => {

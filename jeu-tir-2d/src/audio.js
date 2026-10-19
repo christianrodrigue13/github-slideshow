@@ -112,9 +112,19 @@ export class Sound {
         this.burst(0.18, 2600, 'highpass', 0.7 * vol);
         this.tone('sawtooth', 420, 50, 0.22, 0.35 * vol);
         break;
-      case 'launcher':
-        this.tone('sine', 220, 70, 0.18, 0.7 * vol);
-        this.burst(0.12, 500, 'lowpass', 0.5 * vol);
+      case 'smg':
+        this.burst(0.06, 2200, 'bandpass', 0.45 * vol);
+        this.tone('square', 260, 120, 0.04, 0.12 * vol);
+        break;
+      case 'rocket':
+        this.burst(0.35, 700, 'lowpass', 0.7 * vol);
+        this.tone('sawtooth', 160, 60, 0.3, 0.3 * vol);
+        break;
+      case 'grenade':       // lancer : un "fouit"
+        this.burst(0.15, 1400, 'bandpass', 0.25 * vol);
+        break;
+      case 'empty':         // clic à vide
+        this.tone('square', 1400, 1200, 0.02, 0.15 * vol);
         break;
       case 'explosion':
         this.burst(0.7, 450, 'lowpass', 1.0 * vol);

@@ -32,6 +32,7 @@ const settings = load('settings', { map: 0, mode: 'ffa', difficulty: 'normal', b
 // (sécurité si les valeurs mémorisées ne sont plus valables)
 if (!MAPS[settings.map]) settings.map = 0;
 if (!DIFFS.includes(settings.difficulty)) settings.difficulty = 'normal';
+if (!['ffa', 'teams', 'hill'].includes(settings.mode)) settings.mode = 'ffa';
 settings.bots = Math.max(3, Math.min(7, settings.bots | 0));
 
 function saveSettings() {
@@ -160,6 +161,7 @@ function update(dt) {
     // Tir automatique : on tire seul dès qu'un ennemi est dans le viseur
     if (options.autoFire && enemyInSights(playerCmd)) playerCmd.fire = true;
   }
+  if (window.__forceFire) { playerCmd.fire = true; playerCmd.aimX = 1; playerCmd.aimY = -0.08; }   // (tests)
   if (updateMatch(dt, playerCmd)) {
     setState('over');
     return;
@@ -209,7 +211,7 @@ function changeSetting(id) {
     game.map = new GameMap(MAPS[settings.map]);   // la carte s'affiche en fond
     centerMenuCamera();
   }
-  if (key === 'mode') settings.mode = cycle(['ffa', 'teams'], settings.mode);
+  if (key === 'mode') settings.mode = cycle(['ffa', 'teams', 'hill'], settings.mode);
   if (key === 'difficulty') settings.difficulty = cycle(DIFFS, settings.difficulty);
   if (key === 'bots') settings.bots = 3 + ((settings.bots - 3 + dir + 5) % 5);
   sound.play('switch');
@@ -263,6 +265,7 @@ function render() {
     ctx.scale(view.scale, view.scale);
     ctx.translate(-cam.x + (Math.random() - 0.5) * 2 * sh, -cam.y + (Math.random() - 0.5) * 2 * sh);
     game.map.draw(ctx, cam);
+    drawHillZone();
     for (const pk of game.pickups) pk.draw(ctx);
     for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
     drawAimGuide();
@@ -335,6 +338,32 @@ function drawAimGuide() {
     ctx.lineTo(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+// Zone du Roi de la colline : sa couleur dit qui la tient
+// (blanc = libre, couleur du personnage = tenue, orange = disputée)
+function drawHillZone() {
+  const z = game.hill;
+  if (!z) return;
+  const owner = game.hillOwner;
+  const color = game.hillContested ? '#ff922b' : owner ? (owner === game.player ? '#ffe066' : owner.color) : '#ffffff';
+  const pulse = 0.12 + 0.06 * Math.sin(game.time * 5);
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = color;
+  ctx.fillRect(z.x, z.y, z.w, z.h);
+  ctx.globalAlpha = 0.8;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([12, 8]);
+  ctx.strokeRect(z.x, z.y, z.w, z.h);
+  ctx.setLineDash([]);
+  ctx.font = 'bold 14px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = color;
+  ctx.fillText('★ COLLINE', z.x + z.w / 2, z.y - 4);
   ctx.restore();
 }
 
