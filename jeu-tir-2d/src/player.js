@@ -65,8 +65,9 @@ export class Fighter {
   }
 
   resetWeapons() {
+    // (secondaryId : arme secondaire de départ propre à ce personnage, ex. un bot tireur)
     this.weapons = [new Weapon(weaponDef(CONFIG.loadout.primary)),
-                    new Weapon(weaponDef(CONFIG.loadout.secondary))];
+                    new Weapon(weaponDef(this.secondaryId || CONFIG.loadout.secondary))];
     this.weaponIndex = 0;
   }
 
@@ -388,7 +389,7 @@ export class Fighter {
       ctx.font = 'bold 12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(this.name, x + w / 2, y - 17);
+      ctx.fillText(this.tag ? `${this.tag} ${this.name}` : this.name, x + w / 2, y - 17);
     }
   }
 }

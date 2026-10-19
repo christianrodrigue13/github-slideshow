@@ -194,22 +194,38 @@ export const CONFIG = {
     count: 4,                // nombre de bots par défaut (modifiable dans le menu : 3 à 7)
     // (la précision et le temps de réaction dépendent de la difficulté, plus bas)
     sightRange: 900,         // distance à laquelle ils te repèrent
-    preferredDistance: 320,  // distance qu'ils essaient de garder
     burstTime: 1.0,          // durée d'une rafale
-    burstPause: 0.55,        // pause entre deux rafales
+    // (distance préférée et pause entre rafales : voir les personnalités)
     playerPreference: 1.3,   // >1 : les bots s'en prennent un peu plus à toi
     names: ['Rouille', 'Cobalt', 'Mangue', 'Pixel', 'Orage', 'Brique', 'Néon'],
     colors: ['#ff6b6b', '#4dabf7', '#ffa94d', '#b197fc', '#69db7c', '#f783ac', '#ffd43b'],
+  },
+
+  // --- Personnalités des bots (réparties entre les bots de chaque partie) ---
+  // preferredDistance : distance qu'il cherche à garder avec sa cible
+  // secondary : arme secondaire de départ ; likes : armes qu'il va chercher dans les caisses
+  // burstPause : pause entre deux rafales (plus court = plus agressif)
+  // healthSeek : en dessous de ces PV, il va chercher un soin
+  // retreatHealth : en dessous de ces PV, il fuit sa cible (0 = jamais)
+  // tooClose : il recule si l'ennemi est plus près que ça (0 = jamais)
+  personalities: {
+    agressif: { label: 'Agressif', tag: '⚔', preferredDistance: 140, secondary: 'shotgun',
+                likes: ['shotgun', 'smg'], burstPause: 0.25, healthSeek: 25, retreatHealth: 0, tooClose: 0 },
+    tireur:   { label: 'Tireur', tag: '◎', preferredDistance: 620, secondary: 'sniper',
+                likes: ['sniper', 'rocket'], burstPause: 0.6, healthSeek: 45, retreatHealth: 0, tooClose: 280 },
+    prudent:  { label: 'Prudent', tag: '✚', preferredDistance: 380, secondary: 'smg',
+                likes: ['smg', 'grenade', 'rocket'], burstPause: 0.7, healthSeek: 70, retreatHealth: 40, tooClose: 0 },
   },
 
   // --- Difficulté (choisie dans le menu) ---
   // aimError : erreur de visée des bots en radians (0 = parfait)
   // reactionTime : temps avant qu'un bot tire sur une cible qu'il vient de voir
   // damage : multiplicateur des dégâts infligés par les bots
+  // aggression : agressivité (raccourcit les pauses entre rafales, réduit les replis)
   difficulties: {
-    facile:    { label: 'Facile',    aimError: 0.28, reactionTime: 0.8,  damage: 0.7 },
-    normal:    { label: 'Normal',    aimError: 0.16, reactionTime: 0.45, damage: 1 },
-    difficile: { label: 'Difficile', aimError: 0.08, reactionTime: 0.25, damage: 1.15 },
+    facile:    { label: 'Facile',    aimError: 0.28, reactionTime: 0.8,  damage: 0.7,  aggression: 0.7 },
+    normal:    { label: 'Normal',    aimError: 0.16, reactionTime: 0.45, damage: 1,    aggression: 1 },
+    difficile: { label: 'Difficile', aimError: 0.08, reactionTime: 0.25, damage: 1.15, aggression: 1.35 },
   },
 
   // --- Mode équipes ---

@@ -236,6 +236,9 @@ export function startMatch(settings) {
   game.bots = [];
   const B = CONFIG.bots, T = CONFIG.teams;
   const skill = CONFIG.difficulties[settings.difficulty];
+  // Personnalités réparties à tour de rôle (en partant d'une au hasard)
+  const persKeys = Object.keys(CONFIG.personalities);
+  const persStart = Math.floor(Math.random() * persKeys.length);
   // En équipes : l'équipe du joueur a la moitié (arrondie en dessous) des places
   const total = settings.bots + 1;
   const team0Size = Math.floor(total / 2);
@@ -245,8 +248,12 @@ export function startMatch(settings) {
     const color = game.teams ? shades[i % shades.length] : B.colors[i % B.colors.length];
     const f = new Fighter({ name: B.names[i % B.names.length], color, isBot: true, team });
     if (game.teams) f.labelColor = T.colors[team];
+    const pers = CONFIG.personalities[persKeys[(persStart + i) % persKeys.length]];
+    f.secondaryId = pers.secondary;
+    f.tag = pers.tag;
+    f.personality = pers.label;
     game.fighters.push(f);
-    game.bots.push({ fighter: f, brain: new BotBrain(f, skill) });
+    game.bots.push({ fighter: f, brain: new BotBrain(f, skill, pers) });
   }
   // Chacun sur un point d'apparition différent
   const spawns = [...game.map.spawns].sort(() => Math.random() - 0.5);

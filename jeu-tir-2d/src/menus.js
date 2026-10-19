@@ -239,7 +239,7 @@ export function drawMenu(ctx, state, view, m) {
       ctx.fillStyle = '#fff';
       ctx.fillText(String(i + 1), x0 + 8, y);
       ctx.fillStyle = game.teams ? CONFIG.teams.colors[f.team] : f.color;
-      ctx.fillText(f.name, x0 + 40 * u, y);
+      ctx.fillText(f.tag ? `${f.tag} ${f.name}` : f.name, x0 + 40 * u, y);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#fff';
       ctx.fillText(String(f.kills), x0 + tw - 90 * u, y);

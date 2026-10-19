@@ -7,10 +7,12 @@
 import { CONFIG } from './config.js';
 
 export class BotBrain {
-  // skill = { aimError, reactionTime } : vient de la difficulté choisie
-  constructor(fighter, skill) {
+  // skill = { aimError, reactionTime, aggression } : vient de la difficulté choisie
+  // pers = sa personnalité (agressif, tireur, prudent : voir config.js)
+  constructor(fighter, skill, pers) {
     this.f = fighter;
     this.skill = skill;
+    this.pers = pers;
     this.target = null;
     this.retargetTimer = 0;
     this.seeTimer = 0;          // depuis combien de temps il voit sa cible
@@ -78,19 +80,27 @@ export class BotBrain {
     }
     let dir = this.wanderDir;
     let wantUp = false;
+    const P = this.pers;
+    // Repli quand la vie est basse (prudent ; moins souvent si la difficulté est élevée)
+    const fleeing = P.retreatHealth > 0 && visible && me.health < P.retreatHealth / this.skill.aggression;
     if (t) {
       const adx = Math.abs(dx);
-      if (!engaged) {
+      if (fleeing) {
+        dir = -Math.sign(dx) || dir;                 // s'éloigner de la menace
+      } else if (!engaged) {
         // aller la chercher ; si elle est juste en dessous, on garde un sens
         // pour descendre par un bord (sinon on oscille au-dessus d'elle)
         dir = Math.abs(dx) < 160 && dy > 60 ? this.wanderDir : (Math.sign(dx) || dir);
         if (dy < -80) wantUp = true;                 // elle est plus haut
-      } else if (adx > B.preferredDistance) {
+      } else if (P.tooClose && dist < P.tooClose) {
+        dir = -Math.sign(dx) || dir;                 // tireur : trop près, il recule
+      } else if (adx > P.preferredDistance) {
         dir = Math.sign(dx);                         // se rapprocher
-      } else if (adx < B.preferredDistance * 0.45) {
+      } else if (adx < P.preferredDistance * 0.45) {
         dir = -Math.sign(dx) || dir;                 // reculer un peu
       }                                              // sinon : on "danse"
-      if (dy < -120) wantUp = true;
+      // (l'agressif colle aussi en hauteur : il vole vers une cible un peu plus haute)
+      if (dy < -120 || (P.preferredDistance < 200 && engaged && dy < -50)) wantUp = true;
     }
 
     // Objet intéressant à aller chercher (soin si blessé, meilleure arme…)
@@ -100,7 +110,10 @@ export class BotBrain {
     const inHill = goal && goal.type === 'hill' && this.insideHill(game.hill);
     if (goal && !inHill) {
       const gdx = goal.x - me.cx;
-      if (Math.abs(gdx) > 6) dir = Math.sign(gdx);
+      // objectif juste en dessous (on est sur une plateforme au-dessus) :
+      // on garde un sens pour descendre par un bord, sinon on oscille
+      if (goal.y > me.y + me.h + 40 && Math.abs(gdx) < 160) dir = this.wanderDir;
+      else if (Math.abs(gdx) > 6) dir = Math.sign(gdx);
       wantUp = goal.y < me.y + me.h - 30;
       flyTargetY = goal.y;
     }
@@ -241,7 +254,7 @@ export class BotBrain {
 
     // ---------- 6. Tirer (par rafales) ----------
     this.burstTimer += dt;
-    const cycle = B.burstTime + B.burstPause;
+    const cycle = B.burstTime + P.burstPause / this.skill.aggression;
     if (this.burstTimer > cycle) this.burstTimer -= cycle;
     const inBurst = this.burstTimer < B.burstTime;
     const tooCloseForBlast = me.weapon.def.kind !== 'bullet' && dist < 130;   // explosifs : pas à bout portant
@@ -266,16 +279,18 @@ export class BotBrain {
     const me = this.f;
     if (game.time < this.ignoreGoalsUntil) return null;
     const lowAmmo = me.weapons[0].ammoRatio < 0.3 && me.weapons[1].ammoRatio < 0.3;
+    const P = this.pers;
     let wanted = null, maxDist = 0;
-    if (me.health < 45) { wanted = ['health', 'shield']; maxDist = 1200; }
+    if (me.health < P.healthSeek) { wanted = ['health', 'shield']; maxDist = 1200; }
     else if (lowAmmo) { wanted = ['ammo']; maxDist = 1500; }
     else if (game.hill) return this.hillGoal(game.hill);        // Roi de la colline : la zone d'abord
-    else if (!targetVisible && me.weapons[1].def.id === 'shotgun') { wanted = ['weapon']; maxDist = 900; }
+    else if (!targetVisible && !P.likes.includes(me.weapons[1].def.id)) { wanted = ['weapon']; maxDist = 900; }
     else if (!targetVisible && me.shield === 0) { wanted = ['shield']; maxDist = 700; }
     if (!wanted) return null;
     let best = null, bestD = maxDist;
     for (const p of game.pickups) {
       if (!p.active || !wanted.includes(p.type) || !p.usefulFor(me)) continue;
+      if (p.type === 'weapon' && !P.likes.includes(p.weaponId)) continue;   // seulement ses armes préférées
       const d = Math.hypot(p.x - me.cx, p.y - me.cy);
       if (d < bestD) { bestD = d; best = p; }
     }
