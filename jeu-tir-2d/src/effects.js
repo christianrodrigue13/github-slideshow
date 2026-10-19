@@ -116,9 +116,9 @@ export class Effects {
     for (let i = 0; i < n; i++) this.spawn(x, y, color, opts);
   }
 
-  smoke(x, y, size = 8) {
+  smoke(x, y, size = 8, color = '#9aa3b5') {
     SMOKE.size = size;
-    return this.spawn(x, y, '#9aa3b5', SMOKE);
+    return this.spawn(x, y, color, SMOKE);
   }
 
   // Onde de choc d'une explosion

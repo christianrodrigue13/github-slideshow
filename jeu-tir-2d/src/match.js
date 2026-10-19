@@ -179,6 +179,7 @@ const BLAST_DEBRIS = { speed: 500, size: 4 };
 const CASING = { speed: 120, size: 3, life: 0.5 };
 const DEATH_BITS = { speed: 380, size: 7, life: 0.8 };
 const DEATH_FLASH = { speed: 250, size: 4 };
+const TRAIL_SPARK = { speed: 90, size: 3, life: 0.4, gravity: 300, up: -60 };
 
 // Plus un personnage est loin du joueur, moins on l'entend
 function hearingVolume(f) {
@@ -221,7 +222,8 @@ export function teamScores(fighters) {
 // ---------------------------------------------------------------------
 // Début et fin de partie
 // ---------------------------------------------------------------------
-export function startMatch(settings) {
+// cosmetics = { color, pattern, trail } : apparence choisie par le joueur
+export function startMatch(settings, cosmetics = null) {
   game.settings = settings;
   game.map = new GameMap(MAPS[settings.map]);
   game.mode = settings.mode;
@@ -231,7 +233,12 @@ export function startMatch(settings) {
   game.hillContested = false;
   game.stats = { kills: 0, deaths: 0, streak: 0, bestStreak: 0, weaponKills: {},
                  explosiveKills: 0, airKills: 0, pickups: 0, hillTime: 0 };
-  game.player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color, team: 0 });
+  game.player = new Fighter({ name: CONFIG.player.name,
+                              color: cosmetics ? cosmetics.color : CONFIG.player.color, team: 0 });
+  if (cosmetics) {
+    game.player.pattern = cosmetics.pattern;
+    game.player.trail = cosmetics.trail;
+  }
   game.fighters = [game.player];
   game.bots = [];
   const B = CONFIG.bots, T = CONFIG.teams;
@@ -420,11 +427,15 @@ export function updateMatch(dt, playerCmd) {
   // Roi de la colline : celui qui est SEUL dans la zone marque des points
   if (game.hill && updateHill(dt)) return true;
 
-  // Fumée qui s'échappe des jetpacks
+  // Fumée qui s'échappe des jetpacks (traînée personnalisée pour le joueur)
   for (const f of game.fighters) {
     if (f.alive && f.jetting && Math.random() < 0.45) {
       const nozzle = f.facing === 1 ? f.x - 2 : f.x + f.w + 2;
-      game.effects.smoke(nozzle, f.y + 36, 5);
+      const tr = f.trail;
+      let color = '#9aa3b5';
+      if (tr) color = tr.rainbow ? `hsl(${(game.time * 240) % 360},90%,65%)` : tr.color;
+      game.effects.smoke(nozzle, f.y + 36, 5, color);
+      if (tr && tr.sparks) game.effects.spawn(nozzle, f.y + 36, tr.color, TRAIL_SPARK);
     }
   }
   game.shake *= Math.exp(-9 * dt);

@@ -8,7 +8,10 @@ import { GameMap, MAPS } from './map.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { load, save } from './save.js';
-import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights } from './match.js';
+import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights,
+         playerWon } from './match.js';
+import { loadProfile, saveProfile, finishMatch, cosmetic, isUnlocked, COSMETIC_TYPES } from './progress.js';
+import { initBackup, openBackup, backupIsOpen } from './backup.js';
 import { loadOptions, cycleOption, aimAssistStrength, aimSpeed } from './options.js';
 import { drawHUD, drawTouchControls, drawPauseButton } from './hud.js';
 import { drawMenu, menuButtons, hitMenu } from './menus.js';
@@ -47,9 +50,25 @@ function applyOptions() {
                      aimSpeed: aimSpeed(options) });
 }
 
+// Progression du joueur (XP, missions, cosmétiques, statistiques)
+const profile = loadProfile();
+initBackup();
+
 // Ce dont les écrans de menu ont besoin
-const menuCtx = { game, settings, options };
-let optionsReturn = 'menu';     // écran où revenir en quittant les Options
+const menuCtx = {
+  game, settings, options, profile,
+  summary: null,                        // résumé d'XP de la dernière partie
+  overTime: 0,                          // temps depuis la fin (animation de la barre d'XP)
+  stylePreview: { ...profile.cosmetics },   // choix affiché sur l'écran Style
+};
+let optionsReturn = 'menu';     // écran où revenir en quittant un sous-écran
+
+// Apparence du joueur pour la partie (cosmétiques équipés)
+function playerCosmetics() {
+  const c = profile.cosmetics;
+  return { color: cosmetic('color', c.color).color, pattern: cosmetic('pattern', c.pattern).id,
+           trail: cosmetic('trail', c.trail) };
+}
 
 // L'état de la partie vit dans match.js ; on lui confie le son et les réglages
 game.sound = sound;
@@ -119,7 +138,8 @@ function beginMatch() {
   // Une entrée dans l'historique : le bouton "retour" du téléphone mettra
   // le jeu en pause au lieu de quitter la page (voir plus bas)
   try { if (!history.state || !history.state.jeu) history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
-  startMatch(settings);
+  startMatch(settings, playerCosmetics());
+  menuCtx.summary = null;
   updateCamera(0, true);
   setState('playing');
 }
@@ -142,11 +162,13 @@ function update(dt) {
   if (state === 'playing' && input.touchMode && view.h > view.w) setState('paused');
 
   if (state !== 'playing') {
+    if (state === 'over') menuCtx.overTime += dt;
+    if (backupIsOpen()) { input.taps.length = 0; return; }   // fenêtre de sauvegarde ouverte
     handleMenuTaps();
-    // Échap / bouton pause : reprend depuis la pause, quitte les Options
+    // Échap / bouton pause : reprend depuis la pause, quitte les sous-écrans
     if (input.takePause()) {
       if (state === 'paused') setState('playing');
-      else if (state === 'options') setState(optionsReturn);
+      else if (SUB_SCREENS.includes(state)) setState(optionsReturn);
     }
     return;
   }
@@ -163,12 +185,37 @@ function update(dt) {
   }
   if (window.__forceFire) { playerCmd.fire = true; playerCmd.aimX = 1; playerCmd.aimY = -0.08; }   // (tests)
   if (updateMatch(dt, playerCmd)) {
-    setState('over');
+    endMatch();
     return;
   }
 
   sound.setJet(p.alive && p.jetting ? 1 : 0);
   updateCamera(dt);
+}
+
+// Sous-écrans ouverts depuis l'accueil ou la pause (bouton Retour)
+const SUB_SCREENS = ['options', 'missions', 'style', 'stats'];
+
+// Partie terminée normalement : XP, missions, statistiques
+function endMatch() {
+  menuCtx.summary = finishMatch(profile, {
+    won: playerWon(), mode: game.mode, duration: game.time,
+    hillPoints: game.player.hillPoints, stats: game.stats,
+  });
+  menuCtx.overTime = 0;
+  setState('over');
+}
+
+// Écran Style : passe au cosmétique suivant/précédent ; on l'équipe s'il est débloqué
+function changeCosmetic(key, dir) {
+  const t = COSMETIC_TYPES.find((c) => c.key === key);
+  const i = t.list.findIndex((x) => x.id === menuCtx.stylePreview[key]);
+  const item = t.list[(i + dir + t.list.length) % t.list.length];
+  menuCtx.stylePreview[key] = item.id;
+  if (isUnlocked(item, profile)) {
+    profile.cosmetics[key] = item.id;
+    saveProfile(profile);
+  }
 }
 
 // Clics / touchers sur les boutons des menus
@@ -183,11 +230,20 @@ function handleMenuTaps() {
       beginMatch();
     } else if (id === 'mainmenu') {
       goToMainMenu();
-    } else if (id === 'options') {
+    } else if (SUB_SCREENS.includes(id)) {
       optionsReturn = state;
-      setState('options');
+      if (id === 'style') menuCtx.stylePreview = { ...profile.cosmetics };
+      setState(id);
     } else if (id === 'back') {
+      // (en quittant le Style, l'aperçu revient à ce qui est vraiment équipé)
+      menuCtx.stylePreview = { ...profile.cosmetics };
       setState(optionsReturn);
+    } else if (id === 'export' || id === 'import') {
+      openBackup(id);
+    } else if (id && id.startsWith('cos:')) {
+      const [, key, dir] = id.split(':');
+      changeCosmetic(key, Number(dir));
+      sound.play('switch');
     } else if (id && id.startsWith('opt:')) {
       const [, key, dir] = id.split(':');
       cycleOption(options, key, Number(dir));
@@ -451,7 +507,7 @@ window.addEventListener('click', onGestureEnd);
 window.addEventListener('popstate', () => {
   if (!game.player) return;                    // sur le menu : retour normal
   if (state === 'playing') setState('paused');
-  else if (state === 'options') setState(optionsReturn);
+  else if (SUB_SCREENS.includes(state)) setState(optionsReturn);
   try { history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
 });
 

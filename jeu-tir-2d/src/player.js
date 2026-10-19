@@ -309,6 +309,9 @@ export class Fighter {
     const body = this.hitFlash > 0 ? '#ffffff' : this.color;
     ctx.fillStyle = body;
     roundRect(ctx, x + 2, y + 15, w - 4, h - 27, 6);
+    if (this.pattern && this.pattern !== 'uni' && this.hitFlash <= 0) {
+      drawPattern(ctx, this.pattern, x + 2, y + 15, w - 4, h - 27, shade(this.color, -0.3));
+    }
     ctx.beginPath();
     ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
     ctx.fill();
@@ -392,6 +395,40 @@ export class Fighter {
       ctx.fillText(this.tag ? `${this.tag} ${this.name}` : this.name, x + w / 2, y - 17);
     }
   }
+}
+
+// Motif cosmétique dessiné sur le corps (rayures, pois, damier, éclair)
+function drawPattern(ctx, pattern, x, y, w, h, color) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  if (pattern === 'rayures') {
+    for (let yy = y + 2; yy < y + h; yy += 6) ctx.fillRect(x, yy, w, 2.5);
+  } else if (pattern === 'pois') {
+    for (let yy = y + 3; yy < y + h; yy += 6) {
+      for (let xx = x + 3 + ((yy - y) % 12 ? 3 : 0); xx < x + w; xx += 6) {
+        ctx.beginPath();
+        ctx.arc(xx, yy, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (pattern === 'damier') {
+    for (let yy = y, r = 0; yy < y + h; yy += 4, r++) {
+      for (let xx = x + (r % 2) * 4; xx < x + w; xx += 8) ctx.fillRect(xx, yy, 4, 4);
+    }
+  } else if (pattern === 'eclair') {
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.6, y);
+    ctx.lineTo(x + w * 0.35, y + h * 0.5);
+    ctx.lineTo(x + w * 0.65, y + h * 0.5);
+    ctx.lineTo(x + w * 0.4, y + h);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // Éclaircit (k > 0) ou assombrit (k < 0) une couleur "#rrggbb"

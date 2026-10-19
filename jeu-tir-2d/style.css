@@ -69,4 +69,53 @@ html, body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Fenêtre de sauvegarde de secours (au-dessus du jeu) */
+#backup {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(10, 14, 28, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  color: #fff;
+}
+#backup[hidden] { display: none; }
+#backup .box {
+  width: min(560px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#backup p { margin: 0; font-size: 15px; }
+#backup textarea {
+  height: 30vh;
+  min-height: 90px;
+  font: 12px monospace;
+  border-radius: 8px;
+  border: 1px solid #5c7cad;
+  background: #151b2e;
+  color: #dfe6ff;
+  padding: 8px;
+  /* ici, on veut pouvoir sélectionner, coller, faire défiler */
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: auto;
+}
+#backup .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+#backup button {
+  flex: 1;
+  min-height: 44px;                   /* assez grand pour un pouce */
+  border: 0;
+  border-radius: 10px;
+  background: #3a4a6b;
+  color: #fff;
+  font-size: 15px;
+  font-weight: bold;
+}
+#backup button#backup-copy, #backup button#backup-import { background: #ffb347; color: #1b2440; }
+#backup-msg { color: #ffe066; min-height: 1.2em; }
+
 .nojs { color: #fff; text-align: center; margin-top: 40vh; }

@@ -103,6 +103,8 @@ export class Input {
     // On utilise e.code (position physique de la touche) : W A S D sur un
     // clavier QWERTY correspond automatiquement à Z Q S D sur un AZERTY.
     window.addEventListener('keydown', (e) => {
+      // (on laisse tranquille la saisie dans une zone de texte, ex. sauvegarde)
+      if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
       this.firstGesture();
       if (e.repeat) return;
       this.keys.add(e.code);

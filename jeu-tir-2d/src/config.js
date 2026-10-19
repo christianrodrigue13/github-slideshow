@@ -308,6 +308,62 @@ export const CONFIG = {
     radarTime: 2.5,          // un ennemi apparaît sur la minicarte s'il a tiré récemment
   },
 
+  // --- Progression (XP, niveaux, missions du jour) ---
+  progression: {
+    xp: {
+      participation: 20,     // pour chaque partie terminée
+      perKill: 10,           // par élimination
+      victory: 50,           // si on gagne
+      perHillPoint: 0.5,     // par point de colline
+    },
+    levelBase: 100,          // XP pour passer du niveau 1 au niveau 2…
+    levelStep: 40,           // … puis chaque niveau demande 40 XP de plus
+    maxLevel: 30,
+    missionsPerDay: 3,
+    // Missions possibles : {n} est remplacé par l'objectif
+    missions: [
+      { id: 'kills',     text: 'Élimine {n} ennemis',                       n: 8,  xp: 60 },
+      { id: 'win',       text: 'Gagne une partie',                          n: 1,  xp: 80 },
+      { id: 'games',     text: 'Termine {n} parties',                       n: 3,  xp: 60 },
+      { id: 'shotgun',   text: 'Élimine {n} ennemis au fusil à pompe',      n: 3,  xp: 60 },
+      { id: 'sniper',    text: 'Élimine {n} ennemis au fusil de précision', n: 2,  xp: 70 },
+      { id: 'explosive', text: 'Élimine {n} ennemis avec une explosion',    n: 2,  xp: 70 },
+      { id: 'air',       text: 'Élimine {n} ennemis en plein vol',          n: 3,  xp: 70 },
+      { id: 'pickups',   text: 'Ramasse {n} objets',                        n: 6,  xp: 50 },
+      { id: 'streak',    text: 'Enchaîne {n} éliminations sans mourir',     n: 3,  xp: 70 },
+      { id: 'teams',     text: 'Termine une partie en mode Équipes',        n: 1,  xp: 50 },
+      { id: 'hill',      text: 'Tiens la colline {n} secondes',             n: 30, xp: 70 },
+    ],
+  },
+
+  // --- Cosmétiques (apparence seulement, AUCUN avantage de jeu) ---
+  // level : niveau du joueur nécessaire pour le débloquer
+  cosmetics: {
+    colors: [
+      { id: 'blanc',   name: 'Blanc',   color: '#ffffff', level: 1 },
+      { id: 'menthe',  name: 'Menthe',  color: '#96f2d7', level: 2 },
+      { id: 'citron',  name: 'Citron',  color: '#ffec99', level: 3 },
+      { id: 'corail',  name: 'Corail',  color: '#ffa8a8', level: 5 },
+      { id: 'lavande', name: 'Lavande', color: '#d0bfff', level: 7 },
+      { id: 'or',      name: 'Or',      color: '#fcc419', level: 10 },
+      { id: 'nuit',    name: 'Nuit',    color: '#495057', level: 14 },
+    ],
+    patterns: [
+      { id: 'uni',     name: 'Uni',     level: 1 },
+      { id: 'rayures', name: 'Rayures', level: 3 },
+      { id: 'pois',    name: 'Pois',    level: 6 },
+      { id: 'damier',  name: 'Damier',  level: 9 },
+      { id: 'eclair',  name: 'Éclair',  level: 12 },
+    ],
+    trails: [
+      { id: 'fumee',      name: 'Fumée',        level: 1,  color: '#9aa3b5' },
+      { id: 'bleue',      name: 'Fumée bleue',  level: 4,  color: '#74c0fc' },
+      { id: 'etincelles', name: 'Étincelles',   level: 8,  color: '#ffd43b', sparks: true },
+      { id: 'rose',       name: 'Fumée rose',   level: 11, color: '#faa2c1' },
+      { id: 'arcenciel',  name: 'Arc-en-ciel',  level: 15, rainbow: true },
+    ],
+  },
+
   player: {
     name: 'Toi',
     color: '#ffffff',

@@ -2,14 +2,18 @@
 // menus.js — Les écrans de menu (accueil, pause, options, fin de partie…).
 // Chaque écran fournit la liste de ses boutons (servant au dessin ET
 // aux touchers) puis se dessine. Tout est en pixels CSS.
-// m = { game, settings, options } : ce dont les écrans ont besoin.
+// m = { game, settings, options, profile, summary, stylePreview, overTime } :
+// ce dont les écrans ont besoin (fourni par main.js).
 // =====================================================================
 
-import { CONFIG } from './config.js';
+import { CONFIG, weaponDef } from './config.js';
 import { MAPS } from './map.js';
-import { unit, font, roundedPath } from './ui.js';
+import { unit, font, bar, roundedPath, formatTime } from './ui.js';
 import { ranking, teamScores } from './match.js';
 import { OPTION_ROWS } from './options.js';
+import { Fighter } from './player.js';
+import { levelInfo, missionDef, missionText, timeUntilTomorrow, COSMETIC_TYPES,
+         cosmetic, isUnlocked, favoriteWeapon } from './progress.js';
 
 // Lignes de réglage du menu principal
 const SETTING_ROWS = [
@@ -61,7 +65,9 @@ export function menuButtons(state, view, m) {
     }
     list.push({ id: 'play', label: 'JOUER', x: cx, y: y + rgap * 0.5, w: bw, h: bh, kind: 'primary' });
     // Barre du bas : les autres écrans
-    const extra = [['options', 'Options']];
+    const done = m.profile.missions.list.filter((x) => x.done).length;
+    const extra = [['missions', `Missions ${done}/${m.profile.missions.list.length}`],
+                   ['style', 'Style'], ['stats', 'Stats'], ['options', 'Options']];
     const sh = Math.min(36 * u, view.h * 0.09), sw = Math.min(130 * u, (view.w - 40) / extra.length - 8);
     let sx = view.w / 2 - (extra.length * (sw + 8) - 8) / 2;
     for (const [id, label] of extra) {
@@ -94,6 +100,34 @@ export function menuButtons(state, view, m) {
       settingRow(list, `opt:${row.key}`, row.label, row.text(m.options[row.key]), x, y, colW, rh);
     });
     list.push({ id: 'back', label: 'Retour', x: cx, y: view.h - bh - 12 * u, w: bw, h: bh, kind: 'primary' });
+    return list;
+  }
+
+  if (state === 'missions') {
+    list.push({ id: 'back', label: 'Retour', x: cx, y: view.h - bh - 12 * u, w: bw, h: bh, kind: 'primary' });
+    return list;
+  }
+
+  if (state === 'style') {
+    // Réglages à droite, aperçu du personnage à gauche
+    const rw = Math.min(view.w * 0.5, 330 * u);
+    const rh = Math.min(38 * u, view.h * 0.105), gap = rh * 0.25;
+    const x0 = view.w * 0.45;
+    COSMETIC_TYPES.forEach((t, i) => {
+      const item = cosmetic(t.key, m.stylePreview[t.key]);
+      const lock = isUnlocked(item, m.profile) ? '' : ` 🔒 niv. ${item.level}`;
+      settingRow(list, `cos:${t.key}`, t.label, item.name + lock, x0, view.h * 0.24 + i * (rh + gap), rw, rh);
+    });
+    list.push({ id: 'back', label: 'Retour', x: cx, y: view.h - bh - 12 * u, w: bw, h: bh, kind: 'primary' });
+    return list;
+  }
+
+  if (state === 'stats') {
+    const w3 = Math.min(150 * u, (view.w - 60) / 3), y = view.h - bh - 12 * u;
+    const x3 = view.w / 2 - (w3 * 3 + 16) / 2;
+    list.push({ id: 'export', label: 'Exporter', x: x3, y, w: w3, h: bh });
+    list.push({ id: 'import', label: 'Importer', x: x3 + w3 + 8, y, w: w3, h: bh });
+    list.push({ id: 'back', label: 'Retour', x: x3 + 2 * (w3 + 8), y, w: w3, h: bh, kind: 'primary' });
     return list;
   }
 
@@ -176,11 +210,17 @@ export function drawMenu(ctx, state, view, m) {
                  'Clavier : ZQSD + souris', cx, view.h * 0.16);
   }
 
+  if (state === 'menu') drawLevelBadge(ctx, view, m.profile, u);
+
   if (state === 'paused') {
     ctx.fillStyle = '#fff';
     ctx.font = font(28 * u);
     ctx.fillText('Pause', cx, view.h * 0.15);
   }
+
+  if (state === 'missions') drawMissions(ctx, view, m.profile, u);
+  if (state === 'style') drawStyle(ctx, view, m, u);
+  if (state === 'stats') drawStats(ctx, view, m.profile, u);
 
   if (state === 'options') {
     ctx.fillStyle = '#fff';
@@ -215,8 +255,10 @@ export function drawMenu(ctx, state, view, m) {
     // Tableau du classement
     const top = game.teams ? 70 * u : 60 * u;
     const rowH = Math.min(26 * u, (view.h - top - 70 * u) / (rows.length + 1));
-    const tw = Math.min(view.w - 40, 420 * u);
-    const x0 = cx - tw / 2;
+    // (avec un résumé d'XP : le tableau passe à gauche, l'XP à droite)
+    const tw = m.summary ? Math.min(view.w * 0.55 - 30, 400 * u) : Math.min(view.w - 40, 420 * u);
+    const x0 = m.summary ? Math.max(20, view.safeL + 16) : cx - tw / 2;
+    if (m.summary) drawXpPanel(ctx, view, m, u, x0 + tw + 24, top - 10 * u);
     let y = top;
     ctx.font = font(12 * u);
     ctx.fillStyle = '#aab4d4';
@@ -227,7 +269,7 @@ export function drawMenu(ctx, state, view, m) {
     ctx.fillText('Éliminations', x0 + tw - 90 * u, y);
     ctx.fillText('Morts', x0 + tw - 8, y);
     const hill = game.mode === 'hill';
-    if (hill) ctx.fillText('Points', x0 + tw - 190 * u, y);
+    if (hill) ctx.fillText('Points', x0 + tw - 175 * u, y);
     rows.forEach((f, i) => {
       y += rowH;
       if (f === game.player) {
@@ -246,10 +288,198 @@ export function drawMenu(ctx, state, view, m) {
       ctx.fillText(String(f.deaths), x0 + tw - 8, y);
       if (hill) {
         ctx.fillStyle = '#ffe066';
-        ctx.fillText(String(Math.floor(f.hillPoints)), x0 + tw - 190 * u, y);
+        ctx.fillText(String(Math.floor(f.hillPoints)), x0 + tw - 175 * u, y);
       }
     });
   }
 
   drawButtons(ctx, menuButtons(state, view, m), u);
+}
+
+// ---------------------------------------------------------------------
+// Écrans de progression
+// ---------------------------------------------------------------------
+
+// Niveau du joueur en haut à gauche de l'accueil
+function drawLevelBadge(ctx, view, profile, u) {
+  const L = levelInfo(profile.xp);
+  const x = view.safeL + 14 * u, y = 12 * u, w = 120 * u;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffe066';
+  ctx.font = font(15 * u);
+  ctx.fillText(`Niveau ${L.level}`, x, y + 6 * u);
+  bar(ctx, x, y + 16 * u, w, 7 * u, L.ratio, '#ffe066');
+  ctx.font = font(9 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText(L.level >= CONFIG.progression.maxLevel ? 'niveau max' : `${Math.floor(L.rest)} / ${L.need} XP`,
+               x, y + 32 * u);
+  ctx.textAlign = 'center';
+}
+
+function drawMissions(ctx, view, profile, u) {
+  const cx = view.w / 2;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(24 * u);
+  ctx.fillText('Missions du jour', cx, view.h * 0.1);
+  ctx.font = font(11 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText(`Nouvelles missions dans ${timeUntilTomorrow()} · elles comptent à la fin de chaque partie terminée`,
+               cx, view.h * 0.18);
+  const w = Math.min(view.w - 40, 460 * u), x = cx - w / 2;
+  const rh = Math.min(56 * u, view.h * 0.17);
+  profile.missions.list.forEach((mi, i) => {
+    const def = missionDef(mi.id);
+    if (!def) return;
+    const y = view.h * 0.25 + i * (rh + 8 * u);
+    ctx.fillStyle = mi.done ? 'rgba(81,207,102,0.18)' : 'rgba(20,28,52,0.85)';
+    roundedPath(ctx, x, y, w, rh, 10 * u);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = font(14 * u);
+    ctx.fillText((mi.done ? '✓ ' : '') + missionText(def), x + 12 * u, y + rh * 0.32);
+    bar(ctx, x + 12 * u, y + rh * 0.62, w * 0.6, 8 * u, mi.progress / def.n, mi.done ? '#51cf66' : '#ffb347');
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = '#dfe6ff';
+    ctx.fillText(`${mi.progress} / ${def.n}`, x + 20 * u + w * 0.6, y + rh * 0.62 + 4 * u);
+    ctx.textAlign = 'right';
+    ctx.font = font(14 * u);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(`+${def.xp} XP`, x + w - 12 * u, y + rh * 0.32);
+  });
+  ctx.textAlign = 'center';
+}
+
+// Personnage d'aperçu (réutilisé)
+let previewFighter = null;
+
+function drawStyle(ctx, view, m, u) {
+  const cx = view.w / 2;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(24 * u);
+  ctx.fillText('Style', cx, view.h * 0.1);
+  ctx.font = font(11 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText('Apparence seulement : aucun avantage en jeu. Monte de niveau pour débloquer plus de styles.',
+               cx, view.h * 0.17);
+  // Aperçu agrandi du personnage, avec sa traînée
+  const pv = m.stylePreview;
+  if (!previewFighter) previewFighter = new Fighter({ name: 'Toi', color: '#fff' });
+  const f = previewFighter;
+  f.color = cosmetic('color', pv.color).color;
+  f.pattern = pv.pattern;
+  f.alive = true;
+  f.x = 0; f.y = 0; f.grounded = false; f.jetting = true;
+  f.aimAngle = -0.3; f.facing = 1;
+  const k = Math.min(3 * u, view.h / 160);
+  const px = view.w * 0.24, py = view.h * 0.5;
+  // traînée : quelques bulles de la couleur choisie
+  const tr = cosmetic('trail', pv.trail);
+  const t = performance.now() / 1000;
+  for (let i = 0; i < 6; i++) {
+    const age = (t * 1.5 + i / 6) % 1;
+    ctx.globalAlpha = 0.6 * (1 - age);
+    ctx.fillStyle = tr.rainbow ? `hsl(${(t * 240 + i * 60) % 360},90%,65%)` : tr.color;
+    ctx.beginPath();
+    ctx.arc(px - 14 * k, py + (10 + age * 30) * k, (2 + age * 5) * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.translate(px - (f.w / 2) * k, py - (f.h / 2) * k);
+  ctx.scale(k, k);
+  f.draw(ctx, false);
+  ctx.restore();
+}
+
+function drawStats(ctx, view, profile, u) {
+  const cx = view.w / 2;
+  const S = profile.stats;
+  ctx.fillStyle = '#fff';
+  ctx.font = font(24 * u);
+  ctx.fillText('Statistiques', cx, view.h * 0.1);
+  const fav = favoriteWeapon(profile);
+  const rows = [
+    ['Parties terminées', S.games],
+    ['Victoires', S.wins],
+    ['Éliminations', S.kills],
+    ['Morts', S.deaths],
+    ['Ratio éliminations / morts', S.deaths ? (S.kills / S.deaths).toFixed(2) : String(S.kills)],
+    ['Meilleure série', S.bestStreak],
+    ['Arme préférée', fav ? weaponDef(fav).name : '—'],
+    ['Temps de jeu', S.playTime >= 3600
+      ? `${Math.floor(S.playTime / 3600)} h ${String(Math.floor(S.playTime % 3600 / 60)).padStart(2, '0')}`
+      : formatTime(S.playTime)],
+  ];
+  const w = Math.min(view.w - 40, 520 * u), x = cx - w / 2;
+  const colW = w / 2 - 10 * u;
+  const rh = Math.min(30 * u, view.h * 0.08);
+  rows.forEach(([label, value], i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const rx = x + col * (colW + 20 * u), ry = view.h * 0.2 + row * (rh + 8 * u);
+    ctx.fillStyle = 'rgba(20,28,52,0.85)';
+    roundedPath(ctx, rx, ry, colW, rh, 8 * u);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = '#aab4d4';
+    ctx.fillText(label, rx + 10 * u, ry + rh / 2);
+    ctx.textAlign = 'right';
+    ctx.font = font(14 * u);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(value), rx + colW - 10 * u, ry + rh / 2 + 1);
+  });
+  ctx.textAlign = 'center';
+  ctx.font = font(10 * u, false);
+  ctx.fillStyle = '#aab4d4';
+  ctx.fillText('Sauvegarde de secours : « Exporter » donne un texte à garder, « Importer » le restaure.',
+               cx, view.h * 0.2 + 4 * (rh + 8 * u) + 10 * u);
+}
+
+// Panneau d'XP sur l'écran de fin : lignes gagnées + barre de niveau animée
+function drawXpPanel(ctx, view, m, u, x, y) {
+  const sm = m.summary;
+  const w = view.w - x - Math.max(20, view.safeR + 16);
+  if (w < 120) return;
+  ctx.fillStyle = 'rgba(20,28,52,0.85)';
+  const h = view.h - y - 70 * u;
+  roundedPath(ctx, x, y, w, h, 10 * u);
+  ctx.fill();
+  // La barre se remplit en 1,2 s, de l'ancienne XP à la nouvelle
+  const t = Math.min(1, m.overTime / 1.2);
+  const ease = 1 - (1 - t) * (1 - t);
+  const xpNow = sm.xpBefore + (sm.xpAfter - sm.xpBefore) * ease;
+  const L = levelInfo(xpNow);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffe066';
+  ctx.font = font(15 * u);
+  ctx.fillText(`Niveau ${L.level}`, x + 12 * u, y + 16 * u);
+  ctx.textAlign = 'right';
+  ctx.fillText(`+${Math.round(sm.total * ease)} XP`, x + w - 12 * u, y + 16 * u);
+  bar(ctx, x + 12 * u, y + 28 * u, w - 24 * u, 9 * u, L.ratio, '#ffe066');
+  if (sm.after.level > sm.before.level && t >= 1) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#51cf66';
+    ctx.font = font(13 * u);
+    ctx.fillText('Niveau supérieur !', x + w / 2, y + 50 * u);
+  }
+  // Détail des gains (puis déblocages)
+  let ly = y + 68 * u;
+  const lines = sm.lines.map((l) => [l.label, `+${l.xp}`, '#dfe6ff'])
+    .concat(sm.unlocked.map((name) => [`Débloqué : ${name}`, '★', '#51cf66']));
+  for (const [label, val, color] of lines) {
+    if (ly > y + h - 8 * u) break;
+    ctx.textAlign = 'left';
+    ctx.font = font(11 * u, false);
+    ctx.fillStyle = color;
+    let txt = label;
+    while (ctx.measureText(txt).width > w - 70 * u && txt.length > 4) txt = txt.slice(0, -2);
+    if (txt !== label) txt += '…';
+    ctx.fillText(txt, x + 12 * u, ly);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(val, x + w - 12 * u, ly);
+    ly += 16 * u;
+  }
+  ctx.textAlign = 'center';
 }

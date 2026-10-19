@@ -27,6 +27,20 @@
     <p>Tourne ton téléphone en paysage</p>
   </div>
 
+  <!-- Sauvegarde de secours : texte à copier (export) ou à coller (import) -->
+  <div id="backup" hidden>
+    <div class="box">
+      <p id="backup-title"></p>
+      <textarea id="backup-text" spellcheck="false" autocomplete="off"></textarea>
+      <p id="backup-msg"></p>
+      <div class="buttons">
+        <button id="backup-copy">Copier</button>
+        <button id="backup-import">Restaurer cette sauvegarde</button>
+        <button id="backup-close">Fermer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Affiché si le navigateur est trop ancien pour les modules JavaScript -->
   <noscript><p class="nojs">JavaScript doit être activé pour jouer.</p></noscript>
 
