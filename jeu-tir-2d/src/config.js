@@ -15,6 +15,9 @@ export const CONFIG = {
     minVisibleWidth: 900,    // largeur minimale du monde visible à l'écran
     minVisibleHeight: 560,   // hauteur minimale du monde visible à l'écran
     followSpeed: 8,          // réactivité de la caméra (plus grand = plus collée)
+    lookAhead: 90,           // la caméra regarde un peu vers où on vise (en px)
+    sniperLookAhead: 260,    // … et beaucoup plus avec le sniper
+    sniperZoom: 0.8,         // le sniper dézoome pour voir plus loin (1 = pas de zoom)
     maxPixelRatio: 2,        // limite la netteté sur écrans très denses (perf.)
   },
 
@@ -177,6 +180,10 @@ export const CONFIG = {
     deadZone: 0.18,          // zone morte du joystick (0 à 1)
     jetThreshold: 0.45,      // pousser le joystick gauche au-delà = jetpack
     fireThreshold: 0.35,     // pousser le joystick droit au-delà = tir
+    aimAssist: {             // aide à la visée (téléphone seulement)
+      angle: 0.14,           // agit si un ennemi est à moins de ~8° du viseur (radians)
+      strength: 0.6,         // 0 = aucune aide, 1 = visée verrouillée sur l'ennemi
+    },
   },
 
   // --- Retour sensoriel ---
@@ -188,6 +195,11 @@ export const CONFIG = {
 
   // Gravité appliquée aux grenades
   grenadeGravity: 1300,
+
+  // --- Minicarte ---
+  minimap: {
+    radarTime: 2.5,          // un ennemi apparaît sur la minicarte s'il a tiré récemment
+  },
 
   player: {
     name: 'Toi',

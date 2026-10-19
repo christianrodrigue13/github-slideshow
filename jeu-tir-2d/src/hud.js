@@ -47,7 +47,8 @@ export function teamScores(fighters) {
 // ---------------------------------------------------------------------
 // Interface pendant la partie
 // ---------------------------------------------------------------------
-export function drawHUD(ctx, game, view) {
+// pp = position du joueur à l'écran
+export function drawHUD(ctx, game, view, pp) {
   const u = unit(view);
   const p = game.player;
   const x = view.safeL + 12 * u;
@@ -128,18 +129,61 @@ export function drawHUD(ctx, game, view) {
                  cx, 42 * u);
   }
 
-  // Fil des éliminations (en haut à droite, sous le bouton pause)
-  ctx.textAlign = 'right';
+  // Minicarte (en haut à droite, à gauche du bouton pause)
+  drawMinimap(ctx, game, view, u);
+
+  // Fil des éliminations (au centre, sous le score : loin des boutons tactiles)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.font = font(11 * u, false);
-  let fy = 70;
-  for (const item of game.feed) {
+  let fy = 62 * u;
+  for (const item of game.feed.slice(0, 3)) {
     const age = game.time - item.time;
     ctx.globalAlpha = Math.max(0, Math.min(1, 4 - age));
     ctx.fillStyle = item.mine ? '#ffe066' : '#fff';
-    ctx.fillText(item.text, view.w - view.safeR - 12, fy);
-    fy += 16 * u;
+    ctx.fillText(item.text, cx, fy);
+    fy += 14 * u;
   }
   ctx.globalAlpha = 1;
+
+  // Flèches rouges : d'où viennent les tirs reçus
+  const ring = Math.min(view.w, view.h) * 0.3;
+  for (const m of game.hurtMarks) {
+    const age = game.time - m.time;
+    if (age > 1 || !p.alive) continue;
+    ctx.save();
+    ctx.translate(pp.x, pp.y);
+    ctx.rotate(m.angle);
+    ctx.globalAlpha = 1 - age;
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath();
+    ctx.moveTo(ring + 16 * u, 0);
+    ctx.lineTo(ring, -10 * u);
+    ctx.lineTo(ring, 10 * u);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // Bandeau "Élimination !" (grossit puis s'efface)
+  if (game.banner) {
+    const age = game.time - game.banner.time;
+    if (age < 1.6) {
+      const pop = age < 0.15 ? 0.6 + age / 0.15 * 0.6 : 1.2 - Math.min(0.2, (age - 0.15));
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, (1.6 - age) * 2);
+      ctx.translate(cx, view.h * 0.34);
+      ctx.scale(pop, pop);
+      ctx.textAlign = 'center';
+      ctx.font = font(24 * u);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillText(game.banner.text, 2, 2);
+      ctx.fillStyle = '#ffd43b';
+      ctx.fillText(game.banner.text, 0, 0);
+      ctx.restore();
+    }
+  }
 
   // Écran de mort : compte à rebours
   if (!p.alive) {
@@ -158,6 +202,41 @@ export function drawHUD(ctx, game, view) {
     ctx.fillStyle = `rgba(255,0,40,${p.hitFlash * 2})`;
     ctx.fillRect(0, 0, view.w, view.h);
   }
+}
+
+// Minicarte : murs, objets, joueur (blanc), coéquipiers, et ennemis
+// seulement s'ils ont tiré récemment (comme un radar).
+function drawMinimap(ctx, game, view, u) {
+  const map = game.map;
+  const maxW = Math.min(150 * u, view.w * 0.2), maxH = 80 * u;
+  let k = maxW / map.width;
+  if (map.height * k > maxH) k = maxH / map.height;
+  const w = map.width * k, h = map.height * k;
+  const x0 = view.w - view.safeR - 64 - w, y0 = 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(x0 - 3, y0 - 3, w + 6, h + 6);
+  ctx.fillStyle = 'rgba(200,210,235,0.45)';
+  for (const sd of map.solids) {
+    ctx.fillRect(x0 + sd.x * k, y0 + sd.y * k, Math.max(1, sd.w * k), Math.max(1, sd.h * k));
+  }
+  for (const pk of game.pickups) {
+    if (!pk.active) continue;
+    ctx.fillStyle = pk.type === 'health' ? '#ff8787' : pk.type === 'shield' ? '#74c0fc' : '#e0b44c';
+    ctx.fillRect(x0 + pk.x * k - 1.5, y0 + pk.y * k - 1.5, 3, 3);
+  }
+  const dot = (f, color, r) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x0 + f.cx * k, y0 + f.cy * k, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  for (const f of game.fighters) {
+    if (!f.alive || f === game.player) continue;
+    const enemy = game.canHit(game.player, f);
+    if (!enemy) dot(f, CONFIG.teams.colors[f.team], 2.5);
+    else if (game.time - f.lastShotTime < CONFIG.minimap.radarTime) dot(f, '#ff4d4d', 2.5);
+  }
+  if (game.player.alive) dot(game.player, '#ffffff', 3);
 }
 
 // Bouton pause (toujours visible pendant la partie)

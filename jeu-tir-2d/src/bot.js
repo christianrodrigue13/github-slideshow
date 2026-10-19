@@ -27,6 +27,8 @@ export class BotBrain {
     this.crossing = false;      // en train de traverser un trou en volant
     this.crossDir = 1;
     this.climbTimer = 0;        // vol forcé pour passer un obstacle
+    this.lastSeen = -99;        // dernier moment où la cible était visible
+    this.ignoreGoalsUntil = 0;  // objets ignorés jusqu'à ce moment
   }
 
   // Appelée à chaque réapparition
@@ -59,7 +61,11 @@ export class BotBrain {
       visible = dist < B.sightRange &&
                 map.lineOfSight(me.shoulderX, me.shoulderY, t.cx, t.cy);
     }
-    this.seeTimer = visible ? this.seeTimer + dt : 0;
+    // Mémoire courte : perdre la cible de vue un instant (elle passe derrière
+    // un rebord) ne remet pas tout à zéro, sinon le bot hésite sans jamais tirer
+    if (visible) this.lastSeen = game.time;
+    this.seeTimer = visible ? this.seeTimer + dt : Math.max(0, this.seeTimer - dt);
+    const engaged = visible || game.time - this.lastSeen < 0.8;
 
     // ---------- 2. Se déplacer ----------
     this.wanderTimer -= dt;
@@ -71,8 +77,10 @@ export class BotBrain {
     let wantUp = false;
     if (t) {
       const adx = Math.abs(dx);
-      if (!visible) {
-        dir = Math.sign(dx) || dir;                  // aller la chercher
+      if (!engaged) {
+        // aller la chercher ; si elle est juste en dessous, on garde un sens
+        // pour descendre par un bord (sinon on oscille au-dessus d'elle)
+        dir = Math.abs(dx) < 160 && dy > 60 ? this.wanderDir : (Math.sign(dx) || dir);
         if (dy < -80) wantUp = true;                 // elle est plus haut
       } else if (adx > B.preferredDistance) {
         dir = Math.sign(dx);                         // se rapprocher
@@ -124,16 +132,23 @@ export class BotBrain {
     const aheadX = me.cx + dir * (me.w / 2 + 30);
     if (me.grounded) this.crossing = false;
     if (me.grounded && map.groundBelow(aheadX, feet - 4) === Infinity) {
-      if (t && Math.sign(dx) === dir && me.fuel > 60) {
-        this.crossing = true;                        // la cible est de l'autre côté :
-        this.crossDir = dir;                         // on traverse le trou en volant
+      const towardGoal = goal && Math.sign(goal.x - me.cx) === dir;
+      const towardTarget = t && Math.sign(dx) === dir;
+      if ((towardGoal || towardTarget) && me.fuel > 60) {
+        this.crossing = true;                        // la cible ou l'objet est de l'autre
+        this.crossDir = dir;                         // côté : on traverse en volant
       } else {
         dir = -dir;                                  // sinon : demi-tour
         this.wanderDir = dir;
+        // (pas assez de carburant pour aller chercher l'objet : on l'oublie un moment,
+        //  sinon on fait des allers-retours au bord du trou)
+        if (towardGoal) this.ignoreGoalsUntil = game.time + 3;
       }
     }
-    // En l'air : ne pas s'avancer au-dessus d'un trou (sauf traversée voulue)
-    if (!me.grounded && !this.crossing && map.groundBelow(aheadX, feet) === Infinity) {
+    // En l'air : ne pas s'avancer au-dessus d'un trou (sauf traversée voulue).
+    // On regarde deux points devant : une fente étroite se survole sans risque.
+    if (!me.grounded && !this.crossing && map.groundBelow(aheadX, feet) === Infinity &&
+        map.groundBelow(aheadX + dir * 70, feet) === Infinity) {
       dir = this.nearestGroundDir(map, me.cx, feet) || -dir;
     }
     if (!me.grounded && map.groundBelow(me.cx, feet) === Infinity) {
@@ -203,12 +218,15 @@ export class BotBrain {
     // Recharge au calme
     if (!visible && me.weapon.ammo < me.weapon.def.magazine * 0.4) cmd.reload = true;
 
+    this.lastCmd = cmd;         // (gardée pour le débogage)
+    this.lastCmd = cmd;         // (gardée pour le débogage)
     return cmd;
   }
 
   // Objet à aller chercher, ou null
   pickGoal(game, targetVisible) {
     const me = this.f;
+    if (game.time < this.ignoreGoalsUntil) return null;
     let wanted = null, maxDist = 0;
     if (me.health < 45) { wanted = ['health', 'shield']; maxDist = 1200; }
     else if (!targetVisible && me.weapons[1].def.id === 'shotgun') { wanted = ['weapon']; maxDist = 900; }

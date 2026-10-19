@@ -20,7 +20,8 @@ const input = new Input(canvas);
 const sound = new Sound();
 
 // Taille de l'écran (pixels CSS), zoom monde → écran, marges des encoches
-const view = { w: 0, h: 0, dpr: 1, scale: 1, safeL: 0, safeR: 0 };
+// (scale = baseScale × zoom ; le zoom change avec le sniper)
+const view = { w: 0, h: 0, dpr: 1, scale: 1, baseScale: 1, zoom: 1, safeL: 0, safeR: 0 };
 const cam = { x: 0, y: 0 };
 
 // 'menu' | 'playing' | 'paused' | 'over'
@@ -54,6 +55,9 @@ const game = {
   effects: [],          // ondes de choc des explosions
   pickups: [],
   shake: 0,             // intensité du tremblement d'écran
+  floaters: [],         // chiffres de dégâts qui flottent
+  hurtMarks: [],        // directions d'où viennent les tirs reçus par le joueur
+  banner: null,         // bandeau "Élimination !" { text, time }
   feed: [],             // fil des éliminations
   time: 0,
   timeLeft: CONFIG.rules.matchDuration,
@@ -76,10 +80,13 @@ const game = {
   damage(target, amount, attacker, pushX, pushY) {
     if (!target.alive || target.protectTimer > 0) return;  // invincible après réapparition
     if (attacker && attacker.isBot) amount *= CONFIG.difficulties[settings.difficulty].damage;
+    const total = amount;
+    let absorbedTotal = 0;
     if (target.shield > 0) {
       const absorbed = Math.min(target.shield, amount);
       target.shield -= absorbed;
       amount -= absorbed;
+      absorbedTotal = absorbed;
     }
     target.health -= amount;
     target.hitFlash = 0.12;
@@ -88,6 +95,12 @@ const game = {
     if (attacker && attacker !== target) {
       target.lastAttacker = attacker;
       target.lastAttackTime = game.time;
+    }
+    if (attacker === game.player && target !== game.player) addFloater(target, total, absorbedTotal);
+    if (target === game.player && attacker && attacker !== target) {
+      game.hurtMarks.push({ angle: Math.atan2(attacker.cy - target.cy, attacker.cx - target.cx),
+                            time: game.time });
+      if (game.hurtMarks.length > 6) game.hurtMarks.shift();
     }
     if (target === game.player) {
       sound.play('hurt');
@@ -196,8 +209,9 @@ function resize() {
   canvas.width = Math.round(view.w * view.dpr);
   canvas.height = Math.round(view.h * view.dpr);
   // Zoom : on garantit une surface minimale de monde visible
-  view.scale = Math.min(view.w / CONFIG.view.minVisibleWidth,
-                        view.h / CONFIG.view.minVisibleHeight);
+  view.baseScale = Math.min(view.w / CONFIG.view.minVisibleWidth,
+                            view.h / CONFIG.view.minVisibleHeight);
+  view.scale = view.baseScale * view.zoom;
   // Marges des encoches (iPhone en paysage…), lues depuis le CSS
   const cs = getComputedStyle(safeProbe);
   view.safeL = parseFloat(cs.paddingLeft) || 0;
@@ -213,14 +227,20 @@ resize();
 // ---------------------------------------------------------------------
 function updateCamera(dt, snap = false) {
   const p = game.player;
+  // Zoom : on dézoome doucement quand le joueur tient le sniper
+  const sniper = p.alive && p.weapon.def.id === 'sniper';
+  const k = snap ? 1 : 1 - Math.exp(-CONFIG.view.followSpeed * dt);
+  view.zoom += ((sniper ? CONFIG.view.sniperZoom : 1) - view.zoom) * (snap ? 1 : k * 0.5);
+  view.scale = view.baseScale * view.zoom;
   const viewW = view.w / view.scale;
   const viewH = view.h / view.scale;
-  let tx = p.cx - viewW / 2;
-  let ty = p.cy - viewH / 2;
+  // La caméra regarde un peu dans la direction de visée
+  const look = p.alive ? (sniper ? CONFIG.view.sniperLookAhead : CONFIG.view.lookAhead) : 0;
+  let tx = p.cx + Math.cos(p.aimAngle) * look - viewW / 2;
+  let ty = p.cy + Math.sin(p.aimAngle) * look * 0.6 - viewH / 2;
   tx = Math.max(0, Math.min(game.map.width - viewW, tx));
   ty = Math.max(0, Math.min(game.map.height + 100 - viewH, ty));
   if (viewW > game.map.width) tx = (game.map.width - viewW) / 2;
-  const k = snap ? 1 : 1 - Math.exp(-CONFIG.view.followSpeed * dt);
   cam.x += (tx - cam.x) * k;
   cam.y += (ty - cam.y) * k;
 }
@@ -262,6 +282,9 @@ function startMatch() {
   game.particles = [];
   game.effects = [];
   game.shake = 0;
+  game.floaters = [];
+  game.hurtMarks = [];
+  game.banner = null;
   game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
   game.feed = [];
   game.time = 0;
@@ -307,6 +330,13 @@ function killFighter(victim, killer) {
 
   if (killer && killer !== victim) {
     killer.kills++;
+    if (killer === game.player) {
+      // Éliminations enchaînées en moins de 4 s → bandeau plus fort
+      killer.streak = game.time - (killer.lastKillTime ?? -99) < 4 ? (killer.streak || 1) + 1 : 1;
+      killer.lastKillTime = game.time;
+      const names = ['Élimination !', 'Double élimination !', 'Triple élimination !', 'Inarrêtable !'];
+      game.banner = { text: names[Math.min(killer.streak, 4) - 1], time: game.time };
+    }
     addFeed(`${killer.name}  ✕  ${victim.name}`,
             killer === game.player || victim === game.player);
   } else if (killer === victim) {
@@ -317,6 +347,19 @@ function killFighter(victim, killer) {
   if (victim === game.player) sound.play('death');
   else if (killer === game.player) sound.play('kill');
   else sound.play('death', hearingVolume(victim) * 0.5);
+}
+
+// Chiffre de dégâts au-dessus de la cible (les coups rapprochés s'additionnent)
+function addFloater(target, amount, absorbed) {
+  const color = absorbed >= amount ? '#74c0fc' : '#ffe066';   // bleu = encaissé par le bouclier
+  const fl = game.floaters.find((x) => x.target === target && x.life > 0.55);
+  if (fl) {
+    fl.value += amount;
+    fl.life = 0.9;
+    fl.color = color;
+  } else {
+    game.floaters.push({ target, value: amount, x: target.cx, y: target.y - 22, life: 0.9, color });
+  }
 }
 
 function addFeed(text, mine) {
@@ -351,6 +394,7 @@ function update(dt) {
   const p = game.player;
   const ps = worldToScreen(p.shoulderX, p.shoulderY);
   const playerCmd = input.getCommand(ps.x, ps.y);
+  if (p.alive) applyAimAssist(playerCmd);
   const cmds = new Map([[p, playerCmd]]);
   for (const b of game.bots) cmds.set(b.fighter, b.brain.think(dt, game));
 
@@ -391,9 +435,37 @@ function update(dt) {
     }
   }
   game.shake *= Math.exp(-9 * dt);
+  for (const fl of game.floaters) { fl.life -= dt; fl.y -= 40 * dt; }
+  game.floaters = game.floaters.filter((fl) => fl.life > 0);
 
   sound.setJet(p.alive && p.jetting ? 1 : 0);
   updateCamera(dt);
+}
+
+// Aide à la visée (téléphone) : si un ennemi visible est presque dans
+// l'axe du viseur, la visée glisse un peu vers lui
+function applyAimAssist(cmd) {
+  if (!input.touchMode || !input.rightStick) return;
+  const A = CONFIG.touch.aimAssist;
+  const p = game.player;
+  const aim = Math.atan2(cmd.aimY, cmd.aimX);
+  let bestDiff = null;
+  for (const f of game.fighters) {
+    if (!f.alive || !game.canHit(p, f)) continue;
+    const dx = f.cx - p.shoulderX, dy = f.cy - p.shoulderY;
+    if (Math.hypot(dx, dy) > p.weapon.def.range) continue;
+    let diff = Math.atan2(dy, dx) - aim;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));      // ramène entre -π et π
+    if (Math.abs(diff) > A.angle) continue;
+    if (bestDiff !== null && Math.abs(diff) >= Math.abs(bestDiff)) continue;
+    if (!game.map.lineOfSight(p.shoulderX, p.shoulderY, f.cx, f.cy)) continue;
+    bestDiff = diff;
+  }
+  if (bestDiff !== null) {
+    const a = aim + bestDiff * A.strength;
+    cmd.aimX = Math.cos(a);
+    cmd.aimY = Math.sin(a);
+  }
 }
 
 // Clics / touchers sur les boutons des menus
@@ -443,6 +515,8 @@ function goToMainMenu() {
   game.pickups = [];
   game.particles = [];
   game.effects = [];
+  view.zoom = 1;
+  view.scale = view.baseScale;
   centerMenuCamera();
   setState('menu');
 }
@@ -488,13 +562,18 @@ function render() {
     game.map.draw(ctx, cam);
     for (const pk of game.pickups) pk.draw(ctx);
     for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
+    drawAimGuide();
     game.player.draw(ctx);                       // le joueur par-dessus
     for (const b of game.bullets) b.draw(ctx);
     for (const pa of game.particles) pa.draw(ctx);
     for (const e of game.effects) e.draw(ctx);
+    drawFloaters();
     ctx.restore();
 
-    if (state !== 'over') drawHUD(ctx, game, view);
+    if (state !== 'over') {
+      const pp = worldToScreen(game.player.cx, game.player.cy);
+      drawHUD(ctx, game, view, pp, cam);
+    }
   } else {
     // Écran d'accueil : la carte en fond
     ctx.save();
@@ -510,6 +589,65 @@ function render() {
   } else {
     drawMenu(ctx, state, view, game);
   }
+}
+
+// Ligne de visée du joueur (repère monde) :
+// sniper = laser rouge, lance-grenades = trajectoire en arc,
+// autres armes = pointillés (seulement quand on vise au doigt)
+function drawAimGuide() {
+  const p = game.player;
+  if (state !== 'playing' || !p.alive) return;
+  const def = p.weapon.def;
+  const x0 = p.shoulderX, y0 = p.shoulderY;
+  const dx = Math.cos(p.aimAngle), dy = Math.sin(p.aimAngle);
+  ctx.save();
+  if (def.kind === 'grenade') {
+    // On simule le vol de la grenade et on dessine des points
+    let x = x0, y = y0, vx = dx * def.bulletSpeed + p.vx * 0.5, vy = dy * def.bulletSpeed + p.vy * 0.3;
+    ctx.fillStyle = 'rgba(178,242,187,0.85)';
+    for (let i = 0; i < 30; i++) {
+      const nx = x + vx * 0.035, ny = y + vy * 0.035;
+      if (game.map.raycast(x, y, nx, ny) !== null) break;
+      x = nx; y = ny; vy += CONFIG.grenadeGravity * 0.035;
+      if (i >= 1) {
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(1.5, 4 - i * 0.08), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (def.id === 'sniper' || (input.touchMode && input.rightStick)) {
+    const len = def.id === 'sniper' ? def.range : 230;
+    const x1 = x0 + dx * len, y1 = y0 + dy * len;
+    const t = game.map.raycast(x0, y0, x1, y1) ?? 1;
+    if (def.id === 'sniper') {
+      ctx.strokeStyle = 'rgba(255,70,70,0.55)';
+      ctx.lineWidth = 1.5;
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 8]);
+    }
+    ctx.beginPath();
+    ctx.moveTo(x0 + dx * 30, y0 + dy * 30);
+    ctx.lineTo(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Chiffres de dégâts (repère monde)
+function drawFloaters() {
+  ctx.font = 'bold 16px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const fl of game.floaters) {
+    ctx.globalAlpha = Math.min(1, fl.life * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(Math.round(fl.value), fl.x + 1, fl.y + 1);
+    ctx.fillStyle = fl.color;
+    ctx.fillText(Math.round(fl.value), fl.x, fl.y);
+  }
+  ctx.globalAlpha = 1;
 }
 
 // ---------------------------------------------------------------------
