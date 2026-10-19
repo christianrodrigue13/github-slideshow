@@ -8,11 +8,13 @@
 import { CONFIG } from './config.js';
 import { GameMap, MAPS } from './map.js';
 import { Fighter } from './player.js';
+import { lookFromCosmetics } from './character.js';
 import { BotBrain } from './bot.js';
 import { Pickup } from './pickup.js';
 import { Effects } from './effects.js';
 import { vibrate } from './audio.js';
 import { shakeFactor } from './options.js';
+import { updateHiding, canSee } from './hiding.js';
 
 export const game = {
   map: new GameMap(MAPS[0]),
@@ -240,6 +242,7 @@ export function startMatch(settings, cosmetics = null) {
   if (cosmetics) {
     game.player.pattern = cosmetics.pattern;
     game.player.trail = cosmetics.trail;
+    game.player.look = lookFromCosmetics(cosmetics);
   }
   game.fighters = [game.player];
   game.bots = [];
@@ -420,6 +423,9 @@ export function updateMatch(dt, playerCmd) {
     }
   }
 
+  // Qui est caché dans un buisson ? (voir hiding.js)
+  updateHiding(game, dt);
+
   // 3. Objets, balles, effets
   for (const pk of game.pickups) pk.update(dt, game);
   for (const b of game.bullets) b.update(dt, game);
@@ -482,7 +488,7 @@ export function applyAimAssist(cmd, strength) {
   const aim = Math.atan2(cmd.aimY, cmd.aimX);
   let bestDiff = null;
   for (const f of game.fighters) {
-    if (!f.alive || !game.canHit(p, f)) continue;
+    if (!f.alive || !game.canHit(p, f) || !canSee(game, p, f)) continue;
     const dx = f.cx - p.shoulderX, dy = f.cy - p.shoulderY;
     if (Math.hypot(dx, dy) > p.weapon.def.range) continue;
     let diff = Math.atan2(dy, dx) - aim;
@@ -506,7 +512,7 @@ export function enemyInSights(cmd) {
   const aim = Math.atan2(cmd.aimY, cmd.aimX);
   const range = p.weapon.def.range * 0.9;
   for (const f of game.fighters) {
-    if (!f.alive || !game.canHit(p, f) || f.protectTimer > 0) continue;
+    if (!f.alive || !game.canHit(p, f) || f.protectTimer > 0 || !canSee(game, p, f)) continue;
     const dx = f.cx - p.shoulderX, dy = f.cy - p.shoulderY;
     const d = Math.hypot(dx, dy);
     if (d > range) continue;

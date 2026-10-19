@@ -8,6 +8,7 @@ import { GameMap, MAPS } from './map.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { Scenery } from './scenery.js';
+import { drawHides, canSee } from './hiding.js';
 import { load, save } from './save.js';
 import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights,
          playerWon } from './match.js';
@@ -88,7 +89,8 @@ let optionsReturn = 'menu';     // écran où revenir en quittant un sous-écran
 function playerCosmetics() {
   const c = profile.cosmetics;
   return { color: cosmetic('color', c.color).color, pattern: cosmetic('pattern', c.pattern).id,
-           trail: cosmetic('trail', c.trail) };
+           trail: cosmetic('trail', c.trail),
+           skin: c.skin, hair: c.hair, hairColor: c.hairColor, face: c.face };
 }
 
 // L'état de la partie vit dans match.js ; on lui confie le son et les réglages
@@ -349,6 +351,21 @@ function goFullscreen() {
 // ---------------------------------------------------------------------
 // Dessin
 // ---------------------------------------------------------------------
+
+// Petit œil barré au-dessus du joueur quand il est caché dans un buisson
+// (et "repéré !" s'il est dans un buisson mais vient de tirer)
+function drawHiddenMark() {
+  const p = game.player;
+  if (!p.alive || !p.hideZone) return;
+  const x = p.cx, y = p.y - 12;
+  ctx.font = 'bold 11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x - 27, y - 13, 54, 14);
+  ctx.fillStyle = p.hidden ? '#b2f2bb' : '#ffa8a8';
+  ctx.fillText(p.hidden ? 'caché' : 'repéré !', x, y);
+}
 function render() {
   // Repère écran (pixels CSS) avec prise en compte de la densité
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
@@ -364,10 +381,14 @@ function render() {
     sc.drawWorld(ctx);
     drawHillZone();
     for (const pk of game.pickups) pk.draw(ctx);
-    sc.drawShadows(ctx, game.fighters);
-    for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
+    // (un adversaire caché dans un buisson n'est pas dessiné du tout)
+    const seen = game.fighters.filter((f) => canSee(game, game.player, f));
+    sc.drawShadows(ctx, seen);
+    for (const f of seen) if (f !== game.player) f.draw(ctx);
     drawAimGuide();
     game.player.draw(ctx);                       // le joueur par-dessus
+    drawHides(ctx, game, game.time, { x: cam.x, y: cam.y, w: view.w / view.scale, h: view.h / view.scale });
+    drawHiddenMark();
     for (const b of game.bullets) b.draw(ctx);
     game.effects.draw(ctx);
     sc.drawLights(ctx, game);
@@ -386,6 +407,7 @@ function render() {
     ctx.scale(view.scale, view.scale);
     ctx.translate(-cam.x, -cam.y);
     sc.drawWorld(ctx);
+    drawHides(ctx, game, performance.now() / 1000, { x: cam.x, y: cam.y, w: view.w / view.scale, h: view.h / view.scale });
     ctx.restore();
     sc.drawForeground(ctx, view);
   }

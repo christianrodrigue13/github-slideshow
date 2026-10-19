@@ -179,7 +179,7 @@ inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir a
 | **Difficulté** | Facile, Normal, Difficile : précision, réflexes et agressivité des bots |
 | **Bots** | de 3 à 7 |
 | **Missions** | les 3 missions du jour et leur avancement |
-| **Style** | couleurs, motifs et traînées de jetpack débloqués |
+| **Style** | apparence de ton personnage : peau, coiffure, cheveux, visage, veste, motif, traînée |
 | **Stats** | tes statistiques + la sauvegarde de secours |
 | **Options** | tous les réglages (voir plus bas) |
 
@@ -229,6 +229,22 @@ Une arme vide passe automatiquement à l'autre.
 - **Caisse verte avec cartouches** : remplit la réserve de munitions des 2 armes et donne **+2 grenades**.
 - **Caisse en bois** : une arme.
 
+### Les cachettes (buissons, herbes hautes…)
+
+Chaque carte a **6 cachettes** qu'on traverse librement : des haies en bac et des
+filets de camouflage sur les Docks Néon, des broussailles et des herbes dorées
+dans le Canyon Ardent, des buissons et des herbes fleuries dans la Cité des Nuées.
+
+- Dedans, tu es **invisible pour les adversaires** (les bots ne te voient plus,
+  ils ne peuvent plus te viser). Le mot **« caché »** s'affiche au-dessus de toi, et
+  le buisson devient transparent pour que tu te voies.
+- Si tu **tires** (ou si tu es touché), tu redeviens visible pendant 1,2 s :
+  « **repéré !** » s'affiche.
+- Un ennemi **tout près** (collé à toi) te voit quand même.
+- Les balles traversent le feuillage : ce n'est pas un mur, juste une cachette.
+- Les bots s'en servent aussi : blessés, ils vont se cacher, et attendent en
+  embuscade que tu t'approches. Un buisson qui bouge tout seul… méfiance !
+
 ### Les bots
 Chaque bot a une **personnalité**, indiquée par un symbole devant son nom :
 **⚔ Agressif** (fonce, fusil à pompe), **◎ Tireur** (garde ses distances, fusil de
@@ -271,8 +287,11 @@ précision), **✚ Prudent** (va se soigner tôt, se replie quand il est blessé
   points de colline, missions. Les **niveaux** montent ; l'écran de fin montre
   la barre qui se remplit et le détail des gains.
 - **Missions du jour** : 3 missions tirées au hasard, nouvelles chaque jour à minuit.
-- **Style** : couleurs, motifs et traînées de jetpack se débloquent avec les
-  niveaux. **Uniquement de l'apparence**, aucun avantage en jeu.
+- **Style** : ton personnage est une vraie petite personne. Tu choisis sa
+  **peau**, sa **coiffure** (courts, hérissés, queue de cheval, longs, chignon,
+  rasés, casquette, bonnet), la **couleur des cheveux**, le **visage** (simple,
+  barbe, moustache, lunettes), la **veste**, son **motif** et la **traînée** du
+  jetpack. Une partie se débloque avec les niveaux. **Uniquement de l'apparence**, aucun avantage en jeu.
 - **Stats** : parties, victoires, éliminations, morts, ratio, meilleure série,
   arme préférée, temps de jeu.
 - **Sauvegarde de secours** (écran Stats) : « Exporter » affiche un texte qui
@@ -306,6 +325,9 @@ Change un nombre, enregistre, recharge la page.
 | changer les caractères des bots | `personalities` (distance préférée, armes, replis…) |
 | modifier une arme | son bloc dans `weapons` (`damage`, `fireRate`, `magazine`, `reserve`…) |
 | plus ou moins de munitions | `reserve` de chaque arme (`Infinity` = illimité) |
+| des cachettes plus ou moins efficaces | `hiding` : `revealTime`, `detectDistance`, `botHideHealth`… |
+| déplacer / ajouter des buissons | `hides` de chaque carte, dans `src/map.js` |
+| d'autres peaux, coiffures, couleurs | `cosmetics.skins`, `hairs`, `hairColors`, `faces` |
 | plus ou moins de grenades | `grenades` : `start`, `max`, `perAmmoCrate`, `cooldown` |
 | une explosion plus grosse | `blastRadius` et `knockback` de `rocket` / `grenade` |
 | plus de soin / bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
@@ -339,6 +361,8 @@ jeu-tir-2d/
     ├── config.js    TOUTES les valeurs d'équilibrage
     ├── input.js     clavier / souris / tactile → une « commande » neutre
     ├── player.js    le personnage (physique, jetpack, armes, cosmétiques) — joueur ET bots
+    ├── character.js dessin du personnage : visage, coiffure, veste, jambes articulées
+    ├── hiding.js    les cachettes : qui est invisible, dessin des buissons et herbes
     ├── bot.js       IA (personnalités) : fabrique la même commande qu'un joueur
     ├── weapon.js    chargeur, réserve, cadence, rechargement
     ├── bullet.js    projectiles : balles, roquettes, grenades

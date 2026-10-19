@@ -626,6 +626,7 @@ export class Scenery {
       if (s.w < 90 || s.w > 1400 || s.y < 60) continue;           // pas sur les bords de la carte
       for (let x = s.x + 30 + r() * 80; x < s.x + s.w - 40; x += 110 + r() * 200) {
         if (busy.some((b) => Math.abs(b.x - x) < 60 && Math.abs(b.y - s.y) < 10)) continue;
+        if (m.hides.some((h) => x > h.x - 40 && x < h.x + h.w + 40 && Math.abs(h.y + h.h - s.y) < 10)) continue;
         if (m.solids.some((o) => o !== s && x > o.x - 20 && x < o.x + o.w + 20 && o.y < s.y && o.y + o.h > s.y - 70)) continue;
         const type = this.T.props[Math.floor(r() * this.T.props.length)];
         const P = PROPS[type];

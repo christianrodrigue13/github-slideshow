@@ -10,6 +10,10 @@
 const R = (x, y, w, h) => ({ x, y, w, h });
 const S = (x, y) => ({ x, y });                     // point d'apparition
 const P = (x, y, type) => ({ x, y, type });         // objet à ramasser
+// Cachette (buisson, herbes hautes…) : x = bord gauche, y = surface du sol,
+// w = largeur, h = hauteur, kind = 0 ou 1 (les 2 sortes de cachettes du décor)
+// On la traverse librement ; dedans, on est invisible tant qu'on ne tire pas.
+const H = (x, y, w, h, kind = 0) => ({ x, y: y - h, w, h, kind });
 // Pour S et P : x = centre, y = surface du sol juste en dessous
 
 export const MAPS = [
@@ -45,6 +49,11 @@ export const MAPS = [
       P(760, 840, 'weapon'), P(2440, 840, 'weapon'), P(1280, 590, 'weapon'), P(1920, 590, 'weapon'),
       P(700, 1200, 'ammo'), P(2500, 1200, 'ammo'),
     ],
+    hides: [
+      H(260, 1200, 150, 58, 0), H(2790, 1200, 150, 58, 0),
+      H(1380, 1200, 140, 58, 1), H(1680, 1200, 140, 58, 1),
+      H(300, 650, 110, 56, 0), H(2790, 650, 110, 56, 0),
+    ],
     // Zone du mode Roi de la colline : au-dessus de la plateforme centrale
     hill: R(1440, 640, 320, 130),
   },
@@ -76,6 +85,11 @@ export const MAPS = [
       P(1800, 330, 'shield'),
       P(1060, 780, 'weapon'), P(2540, 780, 'weapon'), P(750, 560, 'weapon'), P(2850, 560, 'weapon'),
       P(1100, 1300, 'ammo'), P(2500, 1300, 'ammo'),
+    ],
+    hides: [
+      H(530, 1300, 130, 60, 0), H(2940, 1300, 130, 60, 0),
+      H(1410, 1300, 160, 60, 1), H(2030, 1300, 160, 60, 1),
+      H(1360, 880, 100, 56, 0), H(2140, 880, 100, 56, 0),
     ],
     // Zone de colline : le rocher flottant du milieu, au-dessus du gouffre
     // (atteignable d'un seul vol depuis les îlots voisins)
@@ -116,6 +130,11 @@ export const MAPS = [
       P(685, 500, 'weapon'), P(1715, 500, 'weapon'), P(950, 850, 'weapon'), P(1450, 850, 'weapon'),
       P(700, 1800, 'ammo'), P(1700, 1800, 'ammo'),
     ],
+    hides: [
+      H(280, 1800, 160, 60, 0), H(1960, 1800, 160, 60, 0),
+      H(750, 1800, 130, 58, 1), H(1520, 1800, 130, 58, 1),
+      H(360, 1100, 110, 56, 0), H(1930, 1100, 110, 56, 0),
+    ],
     // Zone de colline : la structure centrale flottante
     hill: R(1030, 1210, 340, 140),
   },
@@ -132,6 +151,8 @@ export class GameMap {
     this.spawns = def.spawns;
     this.pickupSpots = def.pickups;
     this.hill = def.hill;             // zone du mode Roi de la colline
+    // cachettes (copiées : chacune garde son état d'animation pendant la partie)
+    this.hides = (def.hides || []).map((h) => ({ ...h, rustle: 0 }));
     this.scenery = null;              // décors (créés à l'affichage, voir scenery.js)
   }
 

@@ -8,6 +8,7 @@ import { CONFIG, weaponDef } from './config.js';
 import { Weapon } from './weapon.js';
 import { Bullet, Rocket, Grenade } from './bullet.js';
 import { drawHeldWeapon } from './weaponart.js';
+import { drawCharacter, randomLook } from './character.js';
 
 // Projectile tiré selon le type d'arme
 const PROJECTILE = { bullet: Bullet, rocket: Rocket, grenade: Grenade };
@@ -39,6 +40,9 @@ export class Fighter {
     this.aimAngle = 0;
     this.facing = 1;             // 1 = droite, -1 = gauche
     this.walkPhase = 0;          // avancement de l'animation des jambes
+    this.look = randomLook();    // visage, coiffure, pantalon… (le joueur choisit le sien)
+    this.hidden = false;         // caché dans un buisson (voir hiding.js)
+    this.hideZone = null;
 
     // Armes : [0] = principale, [1] = secondaire (remplaçable)
     this.weapons = [];
@@ -267,86 +271,14 @@ export class Fighter {
     if (!this.alive) return;
     const x = this.x, y = this.y, w = this.w, h = this.h;
     const cx = this.cx;
-    const dark = shade(this.color, -0.35);
     // Invincible : le personnage clignote
     if (this.protectTimer > 0 && Math.floor(this.protectTimer * 10) % 2 === 0) {
       ctx.globalAlpha = 0.4;
     }
-    const back = this.facing === 1 ? x - 6 : x + w - 2;
-
-    // --- Jambes : se balancent en courant, pendent en vol ---
-    const hipY = y + h - 14;
-    let a1, a2;
-    if (this.grounded) {
-      const speed = Math.min(1, Math.abs(this.vx) / CONFIG.fighter.runSpeed);
-      a1 = Math.sin(this.walkPhase) * 0.75 * speed;
-      a2 = -a1;
-    } else if (this.jetting) {
-      a1 = -0.12 * this.facing; a2 = 0.12 * this.facing;
-    } else {
-      a1 = -0.45 * this.facing; a2 = 0.25 * this.facing;   // jambes repliées en l'air
-    }
-    ctx.strokeStyle = dark;
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-    for (const [hx, a] of [[cx - 4, a1], [cx + 4, a2]]) {
-      ctx.beginPath();
-      ctx.moveTo(hx, hipY);
-      ctx.lineTo(hx + Math.sin(a) * 11, hipY + Math.cos(a) * 11);
-      ctx.stroke();
-    }
-
-    // --- Flamme du jetpack ---
-    if (this.jetting) {
-      const len = 14 + Math.random() * 14;
-      ctx.fillStyle = '#ff922b';
-      ctx.beginPath();
-      ctx.moveTo(back + 1, y + 32);
-      ctx.lineTo(back + 8, y + 32);
-      ctx.lineTo(back + 4.5, y + 32 + len);
-      ctx.fill();
-      ctx.fillStyle = '#ffe066';
-      ctx.beginPath();
-      ctx.moveTo(back + 3, y + 32);
-      ctx.lineTo(back + 6, y + 32);
-      ctx.lineTo(back + 4.5, y + 32 + len * 0.55);
-      ctx.fill();
-    }
-
-    // --- Jetpack (boîtier sur le dos) ---
-    ctx.fillStyle = '#6c7489';
-    roundRect(ctx, back, y + 15, 9, 18, 3);
-    ctx.fillStyle = '#495063';
-    ctx.fillRect(back + 1, y + 30, 7, 3);           // tuyère
-
-    // --- Corps et tête (blancs un instant quand on est touché) ---
-    const body = this.hitFlash > 0 ? '#ffffff' : this.color;
-    ctx.fillStyle = body;
-    roundRect(ctx, x + 2, y + 15, w - 4, h - 27, 6);
-    if (this.pattern && this.pattern !== 'uni' && this.hitFlash <= 0) {
-      drawPattern(ctx, this.pattern, x + 2, y + 15, w - 4, h - 27, shade(this.color, -0.3));
-    }
-    ctx.beginPath();
-    ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
-    ctx.fill();
-    // Contour sombre : le personnage reste lisible sur tous les décors
-    // (même un personnage blanc devant des nuages blancs)
-    ctx.strokeStyle = 'rgba(10,12,25,0.75)';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x + 2, y + 15, w - 4, h - 27, 6); else ctx.rect(x + 2, y + 15, w - 4, h - 27);
-    ctx.stroke();
-    // Ceinture
-    ctx.fillStyle = dark;
-    ctx.fillRect(x + 2, hipY - 3, w - 4, 3);
-    // Visière (regarde dans la direction de visée)
-    ctx.fillStyle = '#1b2440';
-    roundRect(ctx, cx + (this.facing === 1 ? 0 : -9), y + 4, 9, 6, 2);
-    ctx.fillStyle = 'rgba(160,220,255,0.6)';
-    ctx.fillRect(cx + (this.facing === 1 ? 5 : -7), y + 5, 2, 2);   // reflet
+    // --- Le corps : une petite personne (dessin : character.js) ---
+    drawCharacter(ctx, this, this.look, this.color, this.hitFlash > 0);
+    const skin = this.hitFlash > 0 ? '#ffffff' : this.look.skin;
+    const sleeve = this.hitFlash > 0 ? '#ffffff' : shade(this.color, -0.15);
 
     // --- Arme, tenue à deux mains, orientée vers la visée (dessin : weaponart.js) ---
     const wpn = this.weapon;
@@ -356,7 +288,8 @@ export class Fighter {
       reload: wpn.reloading ? wpn.reloadProgress : 0,       // inclinaison pendant le rechargement
       loaded: wpn.ammo > 0,                                 // roquette visible / grenade en main
       flash: this.muzzleFlash > 0,
-      handColor: dark,
+      armColor: sleeve,                                     // manches de la veste
+      handColor: skin,                                      // mains
     });
     // Bras qui lance une grenade : il passe de l'arrière vers l'avant
     if (this.throwAnim > 0) {
@@ -364,14 +297,14 @@ export class Fighter {
       const side = Math.cos(this.aimAngle) < 0 ? -1 : 1;
       const a = this.aimAngle - (1 - t) * 2 * side;
       const hx = this.shoulderX + Math.cos(a) * 13, hy = this.shoulderY - 3 + Math.sin(a) * 13;
-      ctx.strokeStyle = dark;
+      ctx.strokeStyle = sleeve;
       ctx.lineWidth = 3.5;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(this.shoulderX, this.shoulderY - 3);
       ctx.lineTo(hx, hy);
       ctx.stroke();
-      ctx.fillStyle = dark;
+      ctx.fillStyle = skin;
       ctx.beginPath(); ctx.arc(hx, hy, 2.4, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -401,40 +334,6 @@ export class Fighter {
   }
 }
 
-// Motif cosmétique dessiné sur le corps (rayures, pois, damier, éclair)
-function drawPattern(ctx, pattern, x, y, w, h, color) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  if (pattern === 'rayures') {
-    for (let yy = y + 2; yy < y + h; yy += 6) ctx.fillRect(x, yy, w, 2.5);
-  } else if (pattern === 'pois') {
-    for (let yy = y + 3; yy < y + h; yy += 6) {
-      for (let xx = x + 3 + ((yy - y) % 12 ? 3 : 0); xx < x + w; xx += 6) {
-        ctx.beginPath();
-        ctx.arc(xx, yy, 1.4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  } else if (pattern === 'damier') {
-    for (let yy = y, r = 0; yy < y + h; yy += 4, r++) {
-      for (let xx = x + (r % 2) * 4; xx < x + w; xx += 8) ctx.fillRect(xx, yy, 4, 4);
-    }
-  } else if (pattern === 'eclair') {
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(x + w * 0.6, y);
-    ctx.lineTo(x + w * 0.35, y + h * 0.5);
-    ctx.lineTo(x + w * 0.65, y + h * 0.5);
-    ctx.lineTo(x + w * 0.4, y + h);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
 // Éclaircit (k > 0) ou assombrit (k < 0) une couleur "#rrggbb"
 export function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
@@ -447,15 +346,4 @@ export function shade(hex, k) {
 export function approach(v, target, step) {
   if (v < target) return Math.min(v + step, target);
   return Math.max(v - step, target);
-}
-
-export function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-  ctx.fill();
 }

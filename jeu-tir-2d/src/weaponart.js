@@ -232,7 +232,7 @@ export function muzzleOf(id) {
 }
 
 // Arme tenue en main. opts : { color, kick (recul 0 à 1), reload (0 à 1),
-// loaded (roquette chargée), flash, handColor }
+// loaded (roquette chargée), flash, armColor (manches), handColor (mains) }
 export function drawHeldWeapon(ctx, id, x, y, angle, opts) {
   const a = ART[id] || ART.rifle;
   const [x0, y0, x1, y1] = a.box;
@@ -245,7 +245,7 @@ export function drawHeldWeapon(ctx, id, x, y, angle, opts) {
   if (left) ctx.scale(1, -1);                 // visée à gauche : l'arme reste à l'endroit
   ctx.translate(-opts.kick * 3.5, 0);         // recul à chaque tir
   // Bras derrière l'arme (de l'épaule vers chaque main)
-  ctx.strokeStyle = opts.handColor;
+  ctx.strokeStyle = opts.armColor || opts.handColor;
   ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
   ctx.beginPath();

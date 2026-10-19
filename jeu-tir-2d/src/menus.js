@@ -12,6 +12,7 @@ import { unit, font, bar, roundedPath, formatTime } from './ui.js';
 import { ranking, teamScores } from './match.js';
 import { OPTION_ROWS } from './options.js';
 import { Fighter } from './player.js';
+import { lookFromCosmetics } from './character.js';
 import { journalSummary } from './journal.js';
 import { levelInfo, missionDef, missionText, timeUntilTomorrow, COSMETIC_TYPES,
          cosmetic, isUnlocked, favoriteWeapon } from './progress.js';
@@ -112,12 +113,12 @@ export function menuButtons(state, view, m) {
   if (state === 'style') {
     // Réglages à droite, aperçu du personnage à gauche
     const rw = Math.min(view.w * 0.5, 330 * u);
-    const rh = Math.min(38 * u, view.h * 0.105), gap = rh * 0.25;
+    const rh = Math.min(30 * u, view.h * 0.072), gap = rh * 0.18;
     const x0 = view.w * 0.45;
     COSMETIC_TYPES.forEach((t, i) => {
       const item = cosmetic(t.key, m.stylePreview[t.key]);
       const lock = isUnlocked(item, m.profile) ? '' : ` 🔒 niv. ${item.level}`;
-      settingRow(list, `cos:${t.key}`, t.label, item.name + lock, x0, view.h * 0.24 + i * (rh + gap), rw, rh);
+      settingRow(list, `cos:${t.key}`, t.label, item.name + lock, x0, view.h * 0.2 + i * (rh + gap), rw, rh);
     });
     list.push({ id: 'back', label: 'Retour', x: cx, y: view.h - bh - 12 * u, w: bw, h: bh, kind: 'primary' });
     return list;
@@ -377,6 +378,7 @@ function drawStyle(ctx, view, m, u) {
   const f = previewFighter;
   f.color = cosmetic('color', pv.color).color;
   f.pattern = pv.pattern;
+  f.look = lookFromCosmetics(pv);
   f.alive = true;
   f.x = 0; f.y = 0; f.grounded = false; f.jetting = true;
   f.aimAngle = -0.3; f.facing = 1;

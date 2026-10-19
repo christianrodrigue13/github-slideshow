@@ -13,12 +13,15 @@ const COS = CONFIG.cosmetics;
 const DEFAULT_PROFILE = {
   xp: 0,
   missions: { day: '', list: [] },                 // [{ id, progress, done }]
-  cosmetics: { color: 'blanc', pattern: 'uni', trail: 'fumee' },
+  cosmetics: { color: 'blanc', pattern: 'uni', trail: 'fumee',
+               skin: 'claire', hair: 'court', hairColor: 'brun', face: 'aucun' },
   stats: { games: 0, wins: 0, kills: 0, deaths: 0, bestStreak: 0, playTime: 0, weaponKills: {} },
 };
 
 export function loadProfile() {
   const p = load('profile', DEFAULT_PROFILE);
+  // (anciennes sauvegardes : on ajoute les choix d'apparence qui n'existaient pas)
+  p.cosmetics = { ...DEFAULT_PROFILE.cosmetics, ...p.cosmetics };
   refreshMissions(p);
   return p;
 }
@@ -113,7 +116,11 @@ export function timeUntilTomorrow() {
 // Cosmétiques
 // ---------------------------------------------------------------------
 export const COSMETIC_TYPES = [
-  { key: 'color', label: 'Couleur', list: COS.colors },
+  { key: 'skin', label: 'Peau', list: COS.skins },
+  { key: 'hair', label: 'Coiffure', list: COS.hairs },
+  { key: 'hairColor', label: 'Cheveux', list: COS.hairColors },
+  { key: 'face', label: 'Visage', list: COS.faces },
+  { key: 'color', label: 'Veste', list: COS.colors },
   { key: 'pattern', label: 'Motif', list: COS.patterns },
   { key: 'trail', label: 'Traînée', list: COS.trails },
 ];

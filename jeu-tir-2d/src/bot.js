@@ -5,6 +5,7 @@
 // =====================================================================
 
 import { CONFIG, weaponDef } from './config.js';
+import { canSee, nearestHide } from './hiding.js';
 
 export class BotBrain {
   // skill = { aimError, reactionTime, aggression } : vient de la difficulté choisie
@@ -35,6 +36,9 @@ export class BotBrain {
     this.ceilDir = 1;           // côté choisi pour contourner un plafond
     this.ceilRect = null;
     this.ceilTimer = 0;
+    this.hideTimer = 0;         // temps restant à rester caché dans un buisson
+    this.nextHideAt = 0;        // pas de nouvelle cachette avant ce moment
+    this.hideTarget = { type: 'hide', x: 0, y: 0, zone: null };
   }
 
   // Appelée à chaque réapparition
@@ -64,7 +68,7 @@ export class BotBrain {
       dx = t.cx - me.cx;
       dy = t.cy - me.cy;
       dist = Math.hypot(dx, dy);
-      visible = dist < B.sightRange &&
+      visible = dist < B.sightRange && canSee(game, me, t) &&
                 map.lineOfSight(me.shoulderX, me.shoulderY, t.cx, t.cy);
     }
     // Mémoire courte : perdre la cible de vue un instant (elle passe derrière
@@ -118,6 +122,18 @@ export class BotBrain {
       wantUp = goal.y < me.y + me.h - 30;
       flyTargetY = goal.y;
     }
+    // Arrivé dans sa cachette : il s'arrête et attend (en embuscade)
+    const hiding = goal && goal.type === 'hide' && me.hideZone === goal.zone;
+    if (hiding) {
+      if (this.hideTimer <= 0) {
+        const [lo, hi] = CONFIG.hiding.botHideTime;
+        this.hideTimer = lo + Math.random() * (hi - lo);
+        this.nextHideAt = game.time + this.hideTimer + 8;      // puis il repart un moment
+      }
+      if (Math.abs(goal.x - me.cx) < 25) dir = 0;
+      wantUp = false;
+    }
+    if (this.hideTimer > 0) this.hideTimer -= dt;
 
     // Un plafond au-dessus ? Inutile de monter tout droit : on le contourne
     // par le bord situé du côté de l'objectif (ou le plus proche si
@@ -152,7 +168,7 @@ export class BotBrain {
         (flyTargetY !== null && me.cy < flyTargetY - 30))) this.flying = false;
 
     // Bloqué contre un mur ? On saute / vole par-dessus
-    if (Math.abs(me.x - this.lastX) < 0.5) this.stuckTimer += dt;
+    if (dir !== 0 && Math.abs(me.x - this.lastX) < 0.5) this.stuckTimer += dt;
     else this.stuckTimer = 0;
     this.lastX = me.x;
     // (on vole alors un petit moment, quelle que soit la hauteur de la cible)
@@ -273,7 +289,8 @@ export class BotBrain {
     if (this.burstTimer > cycle) this.burstTimer -= cycle;
     const inBurst = this.burstTimer < B.burstTime;
     const tooCloseForBlast = me.weapon.def.kind !== 'bullet' && dist < 130;   // explosifs : pas à bout portant
-    if (visible && this.seeTimer >= this.skill.reactionTime && inBurst && !tooCloseForBlast &&
+    const ambush = me.hidden && dist > 420;          // caché : il attend que la cible approche
+    if (visible && !ambush && this.seeTimer >= this.skill.reactionTime && inBurst && !tooCloseForBlast &&
         dist < me.weapon.def.range * 0.9) {
       cmd.fire = true;
     }
@@ -293,6 +310,7 @@ export class BotBrain {
   pickGoal(game, targetVisible) {
     const me = this.f;
     if (game.time < this.ignoreGoalsUntil) return null;
+    if (this.hideTimer > 0 && me.hideZone) return this.hideGoal(me.hideZone);   // reste caché
     const lowAmmo = me.weapons[0].ammoRatio < 0.3 && me.weapons[1].ammoRatio < 0.3;
     const P = this.pers;
     let wanted = null, maxDist = 0;
@@ -301,15 +319,29 @@ export class BotBrain {
     else if (game.hill) return this.hillGoal(game.hill);        // Roi de la colline : la zone d'abord
     else if (!targetVisible && !P.likes.includes(me.weapons[1].def.id)) { wanted = ['weapon']; maxDist = 900; }
     else if (!targetVisible && me.shield === 0) { wanted = ['shield']; maxDist = 700; }
-    if (!wanted) return null;
     let best = null, bestD = maxDist;
+    if (!wanted) wanted = [];
     for (const p of game.pickups) {
       if (!p.active || !wanted.includes(p.type) || !p.usefulFor(me)) continue;
       if (p.type === 'weapon' && !P.likes.includes(p.weaponId)) continue;   // seulement ses armes préférées
       const d = Math.hypot(p.x - me.cx, p.y - me.cy);
       if (d < bestD) { bestD = d; best = p; }
     }
+    // Blessé et pas de soin à portée : il va se cacher dans un buisson
+    if (!best && me.health < CONFIG.hiding.botHideHealth && game.time > this.nextHideAt) {
+      const z = nearestHide(game.map, me.cx, me.y + me.h, CONFIG.hiding.botHideDistance);
+      if (z) return this.hideGoal(z);
+    }
     return best;
+  }
+
+  // Objectif "cachette" : le milieu du buisson, au niveau du sol
+  hideGoal(z) {
+    const g = this.hideTarget;
+    g.x = z.x + z.w / 2;
+    g.y = z.y + z.h;
+    g.zone = z;
+    return g;
   }
 
   // Objectif "colline" : le milieu du bas de la zone (là où l'on se tient)
@@ -330,7 +362,7 @@ export class BotBrain {
     const me = this.f;
     let best = null, bestScore = Infinity;
     for (const o of game.fighters) {
-      if (o === me || !o.alive || !game.canHit(me, o)) continue;
+      if (o === me || !o.alive || !game.canHit(me, o) || !canSee(game, me, o)) continue;
       let d = Math.hypot(o.cx - me.cx, o.cy - me.cy);
       if (!o.isBot) d /= CONFIG.bots.playerPreference;
       if (d < bestScore) { bestScore = d; best = o; }

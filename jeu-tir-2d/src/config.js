@@ -318,6 +318,17 @@ export const CONFIG = {
     botInterval: [4, 9],     // les bots lancent une grenade toutes les 4 à 9 s (si une cible est bien placée)
   },
 
+  // --- Cachettes (buissons, herbes hautes… : voir hiding.js) ---
+  hiding: {
+    revealTime: 1.2,         // après un tir (ou une blessure), on reste visible pendant 1,2 s
+    detectDistance: 70,      // un ennemi tout proche (moins de 70 px) nous voit quand même
+    headMargin: 8,           // la tête peut dépasser un peu du haut du buisson
+    playerAlpha: 0.55,       // opacité du buisson qui cache le joueur (pour qu'il se voie dedans)
+    botHideHealth: 45,       // un bot blessé (sous 45 PV) va se cacher
+    botHideTime: [3, 6],     // … et reste caché 3 à 6 s
+    botHideDistance: 700,    // cachette cherchée jusqu'à cette distance
+  },
+
   // --- Minicarte ---
   minimap: {
     radarTime: 2.5,          // un ennemi apparaît sur la minicarte s'il a tiré récemment
@@ -370,6 +381,41 @@ export const CONFIG = {
       { id: 'damier',  name: 'Damier',  level: 9 },
       { id: 'eclair',  name: 'Éclair',  level: 12 },
     ],
+    // Apparence de la personne (toutes disponibles dès le début, sauf indication)
+    skins: [
+      { id: 'claire',  name: 'Claire',  color: '#f5d0b0', level: 1 },
+      { id: 'doree',   name: 'Dorée',   color: '#e6b48a', level: 1 },
+      { id: 'mate',    name: 'Mate',    color: '#c68a5c', level: 1 },
+      { id: 'brune',   name: 'Brune',   color: '#97603b', level: 1 },
+      { id: 'foncee',  name: 'Foncée',  color: '#6a4029', level: 1 },
+      { id: 'ebene',   name: 'Ébène',   color: '#4a2b1b', level: 1 },
+    ],
+    hairs: [
+      { id: 'court',     name: 'Courts',          level: 1 },
+      { id: 'herisse',   name: 'Hérissés',        level: 1 },
+      { id: 'queue',     name: 'Queue de cheval', level: 1 },
+      { id: 'longs',     name: 'Longs',           level: 1 },
+      { id: 'chignon',   name: 'Chignon',         level: 1 },
+      { id: 'rase',      name: 'Rasés',           level: 1 },
+      { id: 'casquette', name: 'Casquette',       level: 1 },
+      { id: 'bonnet',    name: 'Bonnet',          level: 1 },
+    ],
+    hairColors: [
+      { id: 'brun',    name: 'Bruns',    color: '#4a2f1d', level: 1 },
+      { id: 'noir',    name: 'Noirs',    color: '#1f1a18', level: 1 },
+      { id: 'chatain', name: 'Châtains', color: '#7b5230', level: 1 },
+      { id: 'roux',    name: 'Roux',     color: '#b4542a', level: 1 },
+      { id: 'blond',   name: 'Blonds',   color: '#e2c06e', level: 1 },
+      { id: 'gris',    name: 'Gris',     color: '#b8b8b8', level: 1 },
+      { id: 'bleu',    name: 'Bleus',    color: '#4f7dff', level: 6 },
+      { id: 'rose',    name: 'Roses',    color: '#ff7ac0', level: 9 },
+    ],
+    faces: [
+      { id: 'aucun',     name: 'Simple',    level: 1 },
+      { id: 'barbe',     name: 'Barbe',     level: 1 },
+      { id: 'moustache', name: 'Moustache', level: 1 },
+      { id: 'lunettes',  name: 'Lunettes',  level: 4 },
+    ],
     trails: [
       { id: 'fumee',      name: 'Fumée',        level: 1,  color: '#9aa3b5' },
       { id: 'bleue',      name: 'Fumée bleue',  level: 4,  color: '#74c0fc' },
@@ -377,6 +423,13 @@ export const CONFIG = {
       { id: 'rose',       name: 'Fumée rose',   level: 11, color: '#faa2c1' },
       { id: 'arcenciel',  name: 'Arc-en-ciel',  level: 15, rainbow: true },
     ],
+  },
+
+  // --- Personnages (voir character.js) ---
+  characters: {
+    pants: ['#2b3350', '#3b3f46', '#4a5568', '#5b4a36', '#2f3b2b'],   // pantalons des bots (au hasard)
+    playerPants: '#2b3350',  // pantalon du joueur
+    boots: '#2a211c',
   },
 
   player: {
