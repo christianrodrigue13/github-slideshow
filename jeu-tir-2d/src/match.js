@@ -28,6 +28,8 @@ export const game = {
   pickups: [],
   shake: 0,             // intensité du tremblement d'écran
   floaters: [],         // chiffres de dégâts qui flottent
+  hitMarks: [],         // marqueurs de touche du joueur { x, y, life, kill }
+  slowmo: 0,            // ralenti restant (secondes réelles)
   hurtMarks: [],        // directions d'où viennent les tirs reçus par le joueur
   banner: null,         // bandeau "Élimination !" { text, time }
   feed: [],             // fil des éliminations
@@ -73,10 +75,15 @@ export const game = {
                             time: game.time });
       if (game.hurtMarks.length > 6) game.hurtMarks.shift();
     }
+    if (attacker === game.player && target !== game.player) {
+      game.hitMarks.push({ x: target.cx, y: target.cy, life: CONFIG.feel.hitMarkerTime,
+                           kill: target.health <= 0 });
+      if (game.hitMarks.length > 6) game.hitMarks.shift();
+    }
     if (target === game.player) {
       game.sound.play('hurt');
       game.vibrate(CONFIG.feedback.vibrateOnHit);
-      game.addShake(3);
+      game.addShake(CONFIG.feel.shakeHurt);
     } else if (attacker === game.player) {
       game.sound.play('hitmark');
     }
@@ -108,7 +115,7 @@ export const game = {
     for (let i = 0; i < 8; i++) fx.smoke(x, y, 12);
     const vol = hearingVolumeAt(x, y);
     game.sound.play('explosion', vol);
-    game.addShake(14 * vol);
+    game.addShake(CONFIG.feel.shakeExplosion * vol);
   },
 
   // Quelqu'un ramasse un objet
@@ -124,7 +131,7 @@ export const game = {
   // Tremblement d'écran (multiplié par l'option choisie : 0 = désactivé)
   addShake(amount) {
     const k = game.options ? shakeFactor(game.options) : 1;
-    game.shake = Math.min(18, game.shake + amount * k);
+    game.shake = Math.min(CONFIG.feel.maxShake, game.shake + amount * k);
   },
 
   // Vibration du téléphone (si l'option est activée)
@@ -140,7 +147,7 @@ export const game = {
       game.sound.play(def.id, vol);              // un son par arme
       if (f === game.player) {
         game.vibrate(CONFIG.feedback.vibrateOnShoot);
-        game.addShake(def.recoil / 50);          // les grosses armes secouent plus
+        game.addShake(def.recoil * CONFIG.feel.shakeShootFactor);   // les grosses armes secouent plus
       }
       // Douille éjectée (armes à balles)
       if (def.kind === 'bullet' && vol > 0) {
@@ -226,6 +233,8 @@ function clearMatch() {
   game.effects.clear();
   game.shake = 0;
   game.floaters = [];
+  game.hitMarks = [];
+  game.slowmo = 0;
   game.hurtMarks = [];
   game.banner = null;
   game.feed = [];
@@ -264,7 +273,8 @@ function killFighter(victim, killer) {
   fx.sparks(victim.cx, victim.cy, victim.color, 22, DEATH_BITS);
   fx.sparks(victim.cx, victim.cy, '#ffffff', 6, DEATH_FLASH);
   for (let i = 0; i < 3; i++) fx.smoke(victim.cx, victim.cy, 10);
-  if (victim === game.player) game.addShake(8);
+  if (victim === game.player) game.addShake(CONFIG.feel.shakeDeath);
+  if (killer === game.player && victim !== game.player) game.slowmo = CONFIG.feel.slowmoDuration;
 
   if (killer && killer !== victim) {
     killer.kills++;
@@ -360,6 +370,8 @@ export function updateMatch(dt, playerCmd) {
   game.shake *= Math.exp(-9 * dt);
   for (const fl of game.floaters) { fl.life -= dt; fl.y -= 40 * dt; }
   game.floaters = game.floaters.filter((fl) => fl.life > 0);
+  for (const hm of game.hitMarks) hm.life -= dt;
+  game.hitMarks = game.hitMarks.filter((hm) => hm.life > 0);
   return false;
 }
 

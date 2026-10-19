@@ -204,8 +204,21 @@ export const CONFIG = {
     },
   },
 
+  // --- Sensations de jeu ---
+  feel: {
+    shakeShootFactor: 0.02,  // tremblement au tir = recul de l'arme × ce facteur
+    shakeHurt: 5,            // tremblement quand le joueur est touché (plus fort)
+    shakeDeath: 9,           // … quand le joueur est éliminé
+    shakeExplosion: 14,      // … pour une explosion toute proche
+    maxShake: 18,            // tremblement maximal
+    slowmoDuration: 0.15,    // ralenti quand le joueur élimine quelqu'un (secondes réelles)
+    slowmoScale: 0.3,        // vitesse du jeu pendant le ralenti (0.3 = 30 %)
+    hitMarkerTime: 0.18,     // durée d'affichage du marqueur de touche
+  },
+
   // --- Retour sensoriel ---
   feedback: {
+    pitchVariation: 0.08,    // variation aléatoire de hauteur des sons (± 8 %)
     vibrateOnShoot: 8,       // durée de vibration en ms (0 = désactivé)
     vibrateOnHit: 45,
   },

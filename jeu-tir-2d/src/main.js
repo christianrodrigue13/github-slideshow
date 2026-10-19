@@ -270,6 +270,7 @@ function render() {
     for (const b of game.bullets) b.draw(ctx);
     game.effects.draw(ctx);
     drawFloaters();
+    drawHitMarks();
     ctx.restore();
 
     if (state !== 'over') {
@@ -337,6 +338,25 @@ function drawAimGuide() {
   ctx.restore();
 }
 
+// Marqueurs de touche : petite croix blanche (rouge si élimination)
+function drawHitMarks() {
+  ctx.lineCap = 'round';
+  for (const hm of game.hitMarks) {
+    const t = hm.life / CONFIG.feel.hitMarkerTime;      // 1 → 0
+    const r = (hm.kill ? 14 : 9) * (1.3 - 0.3 * t), gap = 4;
+    ctx.globalAlpha = Math.min(1, t * 1.5);
+    ctx.strokeStyle = hm.kill ? '#ff4d4d' : '#ffffff';
+    ctx.lineWidth = hm.kill ? 3.5 : 2.5;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      ctx.moveTo(hm.x + sx * gap, hm.y + sy * gap);
+      ctx.lineTo(hm.x + sx * r, hm.y + sy * r);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 // Chiffres de dégâts (repère monde)
 function drawFloaters() {
   ctx.font = 'bold 16px system-ui, sans-serif';
@@ -364,7 +384,13 @@ function frame(now) {
   let elapsed = (now - last) / 1000;
   last = now;
   if (elapsed > 0.25) elapsed = 0.25;   // onglet en arrière-plan, gros ralentissement…
-  accumulator += elapsed;
+  // Ralenti (après une élimination du joueur) : le temps du jeu avance moins vite
+  let timeScale = 1;
+  if (game.slowmo > 0 && state === 'playing') {
+    timeScale = CONFIG.feel.slowmoScale;
+    game.slowmo -= elapsed;
+  }
+  accumulator += elapsed * timeScale;
   let steps = 0;
   while (accumulator >= STEP && steps < CONFIG.maxStepsPerFrame) {
     update(STEP);
