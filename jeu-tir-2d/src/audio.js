@@ -12,8 +12,7 @@ export class Sound {
     this.master = null;
     this.noise = null;          // 1 seconde de bruit blanc, réutilisée
     this.jet = null;            // son continu du jetpack
-    this.muted = false;
-    try { this.muted = localStorage.getItem('jetarena-muted') === '1'; } catch (_) { /* rien */ }
+    this.volume = 0.5;          // volume général (réglé dans les options)
   }
 
   // Démarre le son (à appeler pendant un geste de l'utilisateur)
@@ -26,7 +25,7 @@ export class Sound {
     if (!AC) return;            // navigateur sans Web Audio : on joue sans son
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : CONFIG.feedback.volume;
+    this.master.gain.value = this.volume;
     this.master.connect(this.ctx.destination);
 
     // Bruit blanc
@@ -49,10 +48,10 @@ export class Sound {
     this.jet = gain;
   }
 
-  toggleMute() {
-    this.muted = !this.muted;
-    try { localStorage.setItem('jetarena-muted', this.muted ? '1' : '0'); } catch (_) { /* rien */ }
-    if (this.master) this.master.gain.value = this.muted ? 0 : CONFIG.feedback.volume;
+  // Volume général de 0 à 1 (option)
+  setVolume(v) {
+    this.volume = v;
+    if (this.master) this.master.gain.value = v;
   }
 
   // Volume du jetpack (0 = silence)
@@ -95,7 +94,7 @@ export class Sound {
 
   // --- Sons du jeu --- (vol de 0 à 1, selon la distance)
   play(name, vol = 1) {
-    if (!this.ctx || this.muted || vol <= 0.02) return;
+    if (!this.ctx || this.volume <= 0 || vol <= 0.02) return;
     switch (name) {
       case 'rifle':
         this.burst(0.09, 1800, 'bandpass', 0.6 * vol);

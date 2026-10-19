@@ -222,6 +222,26 @@ export function drawTouchControls(ctx, input) {
   if (!input.touchMode || input.uiMode) return;
   const R = input.stickRadius();
 
+  // Joysticks fixes : leur socle est toujours visible
+  if (input.fixedSticks) {
+    for (const which of ['move', 'aim']) {
+      const active = which === 'move' ? input.leftStick : input.rightStick;
+      if (active) continue;
+      const c = input.fixedStickCenter(which);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, R * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   for (const s of [input.leftStick, input.rightStick]) {
     if (!s) continue;
     const v = input.stickValue(s);
@@ -238,13 +258,15 @@ export function drawTouchControls(ctx, input) {
     ctx.fill();
   }
 
-  // Indications quand aucun doigt n'est posé
+  // Indications quand aucun doigt n'est posé (côtés inversés en mode gaucher)
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.font = font(input.h * 0.035, false);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (!input.leftStick) ctx.fillText('bouger / voler', input.w * 0.2, input.h * 0.82);
-  if (!input.rightStick) ctx.fillText('viser / tirer', input.w * 0.75, input.h * 0.82);
+  const moveX = input.leftHanded ? 0.8 : 0.2, aimX = input.leftHanded ? 0.25 : 0.75;
+  const hintY = input.fixedSticks ? 0.92 : 0.82;
+  if (!input.leftStick) ctx.fillText('bouger / voler', input.w * moveX, input.h * hintY);
+  if (!input.rightStick) ctx.fillText('viser / tirer', input.w * aimX, input.h * hintY);
 
   // Boutons recharger / changer d'arme
   for (const b of [input.buttons.reload, input.buttons.swap]) {

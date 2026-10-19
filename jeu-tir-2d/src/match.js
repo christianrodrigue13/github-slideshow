@@ -12,6 +12,7 @@ import { BotBrain } from './bot.js';
 import { Pickup } from './pickup.js';
 import { Effects } from './effects.js';
 import { vibrate } from './audio.js';
+import { shakeFactor } from './options.js';
 
 export const game = {
   map: new GameMap(MAPS[0]),
@@ -122,7 +123,7 @@ export const game = {
 
   // Tremblement d'écran (multiplié par l'option choisie : 0 = désactivé)
   addShake(amount) {
-    const k = game.options ? game.options.shake : 1;
+    const k = game.options ? shakeFactor(game.options) : 1;
     game.shake = Math.min(18, game.shake + amount * k);
   },
 
@@ -386,4 +387,24 @@ export function applyAimAssist(cmd, strength) {
     cmd.aimX = Math.cos(a);
     cmd.aimY = Math.sin(a);
   }
+}
+
+// Tir automatique : vrai si un ennemi visible est presque dans l'axe du
+// viseur et à portée de l'arme
+export function enemyInSights(cmd) {
+  const p = game.player;
+  const aim = Math.atan2(cmd.aimY, cmd.aimX);
+  const range = p.weapon.def.range * 0.9;
+  for (const f of game.fighters) {
+    if (!f.alive || !game.canHit(p, f) || f.protectTimer > 0) continue;
+    const dx = f.cx - p.shoulderX, dy = f.cy - p.shoulderY;
+    const d = Math.hypot(dx, dy);
+    if (d > range) continue;
+    // tolérance angulaire un peu plus large pour les cibles proches (elles sont plus grosses)
+    const tol = CONFIG.options.autoFireAngle + Math.atan2(f.h / 2, d);
+    const diff = Math.atan2(Math.sin(Math.atan2(dy, dx) - aim), Math.cos(Math.atan2(dy, dx) - aim));
+    if (Math.abs(diff) > tol) continue;
+    if (game.map.lineOfSight(p.shoulderX, p.shoulderY, f.cx, f.cy)) return true;
+  }
+  return false;
 }

@@ -1,13 +1,15 @@
 // =====================================================================
-// menus.js — Les écrans de menu (accueil, pause, fin de partie…).
+// menus.js — Les écrans de menu (accueil, pause, options, fin de partie…).
 // Chaque écran fournit la liste de ses boutons (servant au dessin ET
 // aux touchers) puis se dessine. Tout est en pixels CSS.
+// m = { game, settings, options } : ce dont les écrans ont besoin.
 // =====================================================================
 
 import { CONFIG } from './config.js';
 import { MAPS } from './map.js';
-import { unit, font } from './ui.js';
+import { unit, font, roundedPath } from './ui.js';
 import { ranking, teamScores } from './match.js';
+import { OPTION_ROWS } from './options.js';
 
 // Lignes de réglage du menu principal
 const SETTING_ROWS = [
@@ -17,62 +19,99 @@ const SETTING_ROWS = [
   { key: 'bots', label: 'Bots' },
 ];
 
+export const MODE_NAMES = { ffa: 'Chacun pour soi', teams: 'Équipes' };
+
 function settingValue(key, settings) {
   if (key === 'map') return MAPS[settings.map].name;
-  if (key === 'mode') return settings.mode === 'teams' ? 'Équipes' : 'Chacun pour soi';
+  if (key === 'mode') return MODE_NAMES[settings.mode];
   if (key === 'difficulty') return CONFIG.difficulties[settings.difficulty].label;
   return String(settings.bots);
 }
 
-// Position des boutons de chaque menu (sert au dessin ET aux clics)
-export function menuButtons(state, view, game) {
+// Ajoute une ligne de réglage : [◀] [valeur (touche = suivant)] [▶]
+// prefix + ":-1" / ":1" forment les identifiants des boutons
+function settingRow(list, prefix, caption, value, x, y, w, h) {
+  const aw = h * 1.1;
+  list.push({ id: `${prefix}:-1`, label: '◀', x, y, w: aw, h, kind: 'arrow' });
+  list.push({ id: `${prefix}:1`, label: value, caption, x: x + aw + 4, y, w: w - 2 * aw - 8, h,
+              kind: 'setting' });
+  list.push({ id: `${prefix}:1`, label: '▶', x: x + w - aw, y, w: aw, h, kind: 'arrow' });
+}
+
+// Zone du titre sur l'écran d'accueil (appui long = écran caché du journal)
+export function titleRect(view) {
+  return { x: view.w * 0.25, y: 0, w: view.w * 0.5, h: view.h * 0.17 };
+}
+
+// Position des boutons de chaque écran (sert au dessin ET aux touchers)
+export function menuButtons(state, view, m) {
   const u = unit(view);
-  const bw = 200 * u, bh = 44 * u, gap = 12 * u;
+  const bw = 200 * u, bh = Math.min(44 * u, view.h * 0.11);
   const cx = view.w / 2 - bw / 2;
-  const btn = (id, label, y) => ({ id, label, x: cx, y, w: bw, h: bh });
+  const list = [];
+
   if (state === 'menu') {
-    // Chaque réglage : [◀] [valeur (touche = suivant)] [▶]
-    const list = [];
-    const rh = Math.min(40 * u, view.h * 0.105), rgap = rh * 0.2;
-    const rw = Math.min(view.w - 40, 330 * u), aw = rh * 1.1;
+    const rh = Math.min(36 * u, view.h * 0.088), rgap = rh * 0.2;
+    const rw = Math.min(view.w - 40, 330 * u);
     const x0 = view.w / 2 - rw / 2;
-    let y = view.h * 0.27;
+    let y = view.h * 0.2;
     for (const row of SETTING_ROWS) {
-      list.push({ id: `${row.key}:-1`, label: '◀', x: x0, y, w: aw, h: rh, small: true });
-      list.push({ id: `${row.key}:1`, label: settingValue(row.key, game.settings), caption: row.label,
-                  x: x0 + aw + 4, y, w: rw - 2 * aw - 8, h: rh, setting: true });
-      list.push({ id: `${row.key}:1`, label: '▶', x: x0 + rw - aw, y, w: aw, h: rh, small: true });
+      settingRow(list, row.key, row.label, settingValue(row.key, m.settings), x0, y, rw, rh);
       y += rh + rgap;
     }
-    list.push({ ...btn('play', 'JOUER', y + rgap), h: Math.min(bh, view.h * 0.12) });
+    list.push({ id: 'play', label: 'JOUER', x: cx, y: y + rgap * 0.5, w: bw, h: bh, kind: 'primary' });
+    // Barre du bas : les autres écrans
+    const extra = [['options', 'Options']];
+    const sh = Math.min(36 * u, view.h * 0.09), sw = Math.min(130 * u, (view.w - 40) / extra.length - 8);
+    let sx = view.w / 2 - (extra.length * (sw + 8) - 8) / 2;
+    for (const [id, label] of extra) {
+      list.push({ id, label, x: sx, y: view.h - sh - 8 * u, w: sw, h: sh, kind: 'small' });
+      sx += sw + 8;
+    }
     return list;
   }
+
   if (state === 'paused') {
-    const h2 = Math.min(bh, view.h * 0.115), g2 = h2 * 0.25;
-    const y0 = view.h * 0.27;
-    const b2 = (id, label, i) => ({ id, label, x: cx, y: y0 + i * (h2 + g2), w: bw, h: h2 });
+    const g2 = bh * 0.25, y0 = view.h * 0.27;
+    const b2 = (id, label, i, kind) => ({ id, label, x: cx, y: y0 + i * (bh + g2), w: bw, h: bh, kind });
     return [
-      b2('resume', 'Reprendre', 0),
+      b2('resume', 'Reprendre', 0, 'primary'),
       b2('restart', 'Recommencer', 1),
-      b2('sound', game.sound.muted ? 'Son : coupé' : 'Son : activé', 2),
+      b2('options', 'Options', 2),
       b2('mainmenu', 'Menu principal', 3),
     ];
   }
+
+  if (state === 'options') {
+    // Deux colonnes de réglages + bouton Retour
+    const colW = Math.min((view.w - 60) / 2, 330 * u);
+    const rh = Math.min(38 * u, view.h * 0.105), gap = rh * 0.22;
+    const xL = view.w / 2 - colW - 10, xR = view.w / 2 + 10;
+    const perCol = Math.ceil(OPTION_ROWS.length / 2);
+    OPTION_ROWS.forEach((row, i) => {
+      const x = i < perCol ? xL : xR;
+      const y = view.h * 0.2 + (i % perCol) * (rh + gap);
+      settingRow(list, `opt:${row.key}`, row.label, row.text(m.options[row.key]), x, y, colW, rh);
+    });
+    list.push({ id: 'back', label: 'Retour', x: cx, y: view.h - bh - 12 * u, w: bw, h: bh, kind: 'primary' });
+    return list;
+  }
+
   if (state === 'over') {
-    const w2 = bw * 0.9;
+    const w2 = bw * 0.9, y = view.h - bh - 12 * u;
     return [
-      { id: 'replay', label: 'Rejouer', x: view.w / 2 - w2 - 6 * u, y: view.h - bh - 12 * u, w: w2, h: bh },
-      { id: 'mainmenu', label: 'Menu', x: view.w / 2 + 6 * u, y: view.h - bh - 12 * u, w: w2, h: bh },
+      { id: 'replay', label: 'Rejouer', x: view.w / 2 - w2 - 6 * u, y, w: w2, h: bh, kind: 'primary' },
+      { id: 'mainmenu', label: 'Menu', x: view.w / 2 + 6 * u, y, w: w2, h: bh },
     ];
   }
-  return [];
+  return list;
 }
 
 // Renvoie l'id du bouton touché, ou null
 export function hitMenu(buttons, tap) {
-  // Touche Entrée / Espace = premier bouton
+  // Touche Entrée / Espace = bouton principal de l'écran
   if (tap.key) {
-    const main = buttons.find((b) => ['play', 'resume', 'replay'].includes(b.id));
+    const main = buttons.find((b) => b.kind === 'primary');
     return main ? main.id : null;
   }
   for (const b of buttons) {
@@ -82,45 +121,45 @@ export function hitMenu(buttons, tap) {
 }
 
 function drawButtons(ctx, buttons, u) {
+  ctx.textBaseline = 'middle';
   for (const b of buttons) {
-    if (b.setting || b.small) {
-      ctx.fillStyle = b.small ? 'rgba(255,255,255,0.10)' : 'rgba(20,28,52,0.85)';
-      ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 8 * u) : ctx.rect(b.x, b.y, b.w, b.h);
+    if (b.kind === 'arrow') {
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      roundedPath(ctx, b.x, b.y, b.w, b.h, 8 * u);
       ctx.fill();
-      ctx.textBaseline = 'middle';
-      if (b.setting) {
-        ctx.font = font(10 * u, false);
-        ctx.fillStyle = '#aab4d4';
-        ctx.textAlign = 'left';
-        ctx.fillText(b.caption, b.x + 10 * u, b.y + b.h / 2);
-        ctx.font = font(15 * u);
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText(b.label, b.x + b.w / 2 + 20 * u, b.y + b.h / 2 + 1);
-      } else {
-        ctx.font = font(14 * u);
-        ctx.fillStyle = '#ffb347';
-        ctx.textAlign = 'center';
-        ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
-      }
-      continue;
+      ctx.font = font(14 * u);
+      ctx.fillStyle = '#ffb347';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
+    } else if (b.kind === 'setting') {
+      ctx.fillStyle = 'rgba(20,28,52,0.85)';
+      roundedPath(ctx, b.x, b.y, b.w, b.h, 8 * u);
+      ctx.fill();
+      ctx.font = font(10 * u, false);
+      ctx.fillStyle = '#aab4d4';
+      ctx.textAlign = 'left';
+      ctx.fillText(b.caption, b.x + 10 * u, b.y + b.h / 2);
+      ctx.font = font(14 * u);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.fillText(b.label, b.x + b.w - 10 * u, b.y + b.h / 2 + 1);
+    } else {
+      const primary = b.kind === 'primary';
+      ctx.fillStyle = primary ? '#ffb347' : b.kind === 'small' ? 'rgba(58,74,107,0.9)' : '#3a4a6b';
+      roundedPath(ctx, b.x, b.y, b.w, b.h, 10 * u);
+      ctx.fill();
+      ctx.fillStyle = primary ? '#1b2440' : '#fff';
+      ctx.font = font((b.kind === 'small' ? 13 : 17) * u);
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
     }
-    ctx.fillStyle = b.id === 'play' || b.id === 'replay' || b.id === 'resume' ? '#ffb347' : '#3a4a6b';
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(b.x, b.y, b.w, b.h, 10 * u) : ctx.rect(b.x, b.y, b.w, b.h);
-    ctx.fill();
-    ctx.fillStyle = b.id === 'play' || b.id === 'replay' || b.id === 'resume' ? '#1b2440' : '#fff';
-    ctx.font = font(17 * u);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
   }
 }
 
-export function drawMenu(ctx, state, view, game) {
+export function drawMenu(ctx, state, view, m) {
   const u = unit(view);
   const cx = view.w / 2;
+  const game = m.game;
   ctx.fillStyle = 'rgba(10,14,28,0.78)';
   ctx.fillRect(0, 0, view.w, view.h);
   ctx.textAlign = 'center';
@@ -128,18 +167,25 @@ export function drawMenu(ctx, state, view, game) {
 
   if (state === 'menu') {
     ctx.fillStyle = '#ffb347';
-    ctx.font = font(Math.min(40 * u, view.h * 0.11));
-    ctx.fillText('JET ARENA', cx, view.h * 0.11);
+    ctx.font = font(Math.min(36 * u, view.h * 0.1));
+    ctx.fillText('JET ARENA', cx, view.h * 0.09);
     ctx.fillStyle = '#aab4d4';
-    ctx.font = font(11 * u, false);
-    ctx.fillText('Pouce gauche : bouger / voler   ·   Pouce droit : viser / tirer   ·   ' +
-                 'Clavier : ZQSD + souris', cx, view.h * 0.205);
+    ctx.font = font(10 * u, false);
+    const [mv, am] = m.options.leftHanded ? ['droit', 'gauche'] : ['gauche', 'droit'];
+    ctx.fillText(`Pouce ${mv} : bouger / voler   ·   Pouce ${am} : viser / tirer   ·   ` +
+                 'Clavier : ZQSD + souris', cx, view.h * 0.16);
   }
 
   if (state === 'paused') {
     ctx.fillStyle = '#fff';
     ctx.font = font(28 * u);
     ctx.fillText('Pause', cx, view.h * 0.15);
+  }
+
+  if (state === 'options') {
+    ctx.fillStyle = '#fff';
+    ctx.font = font(24 * u);
+    ctx.fillText('Options', cx, view.h * 0.1);
   }
 
   if (state === 'over') {
@@ -199,5 +245,5 @@ export function drawMenu(ctx, state, view, game) {
     });
   }
 
-  drawButtons(ctx, menuButtons(state, view, game), u);
+  drawButtons(ctx, menuButtons(state, view, m), u);
 }

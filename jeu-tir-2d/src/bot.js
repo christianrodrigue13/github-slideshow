@@ -126,6 +126,9 @@ export class BotBrain {
     if (this.stuckTimer > 0.2 && (me.fuel > 25 || !me.grounded)) this.climbTimer = 0.5;
     if (this.stuckTimer > 2) { this.wanderDir = -dir; dir = -dir; this.stuckTimer = 0; }
     if (this.climbTimer > 0) this.climbTimer -= dt;
+    // retombé au sol sans carburant : on annule la tentative (sinon il ressaute
+    // aussitôt, en boucle, sans jamais laisser le jetpack se recharger)
+    if (me.grounded && me.fuel <= 25) this.climbTimer = 0;
 
     // ---------- 3. Éviter le vide ----------
     const feet = me.y + me.h;

@@ -8,7 +8,8 @@ import { GameMap, MAPS } from './map.js';
 import { Input } from './input.js';
 import { Sound } from './audio.js';
 import { load, save } from './save.js';
-import { game, startMatch, resetMatch, updateMatch, applyAimAssist } from './match.js';
+import { game, startMatch, resetMatch, updateMatch, applyAimAssist, enemyInSights } from './match.js';
+import { loadOptions, cycleOption, aimAssistStrength, aimSpeed } from './options.js';
 import { drawHUD, drawTouchControls, drawPauseButton } from './hud.js';
 import { drawMenu, menuButtons, hitMenu } from './menus.js';
 
@@ -37,9 +38,22 @@ function saveSettings() {
   save('settings', settings);
 }
 
+// Options du joueur (écran Options), sauvegardées sur l'appareil
+const options = loadOptions();
+function applyOptions() {
+  sound.setVolume(options.volume);
+  input.setOptions({ leftHanded: options.leftHanded, fixedSticks: options.fixedSticks,
+                     aimSpeed: aimSpeed(options) });
+}
+
+// Ce dont les écrans de menu ont besoin
+const menuCtx = { game, settings, options };
+let optionsReturn = 'menu';     // écran où revenir en quittant les Options
+
 // L'état de la partie vit dans match.js ; on lui confie le son et les réglages
 game.sound = sound;
 game.settings = settings;
+game.options = options;
 game.map = new GameMap(MAPS[settings.map]);
 
 // Élément invisible dont le CSS donne la taille des encoches
@@ -67,6 +81,7 @@ function resize() {
   view.safeR = parseFloat(cs.paddingRight) || 0;
   input.resize(view.w, view.h, view.safeR);
 }
+applyOptions();
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 250));
 resize();
@@ -100,6 +115,9 @@ function worldToScreen(x, y) {
 
 // Lance une partie avec les réglages du menu
 function beginMatch() {
+  // Une entrée dans l'historique : le bouton "retour" du téléphone mettra
+  // le jeu en pause au lieu de quitter la page (voir plus bas)
+  try { if (!history.state || !history.state.jeu) history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
   startMatch(settings);
   updateCamera(0, true);
   setState('playing');
@@ -124,8 +142,11 @@ function update(dt) {
 
   if (state !== 'playing') {
     handleMenuTaps();
-    // Échap / bouton pause : reprend depuis la pause, ignoré dans les autres menus
-    if (input.takePause() && state === 'paused') setState('playing');
+    // Échap / bouton pause : reprend depuis la pause, quitte les Options
+    if (input.takePause()) {
+      if (state === 'paused') setState('playing');
+      else if (state === 'options') setState(optionsReturn);
+    }
     return;
   }
   if (input.takePause()) { setState('paused'); return; }
@@ -133,8 +154,12 @@ function update(dt) {
   // Commande du joueur (+ aide à la visée quand on vise au doigt)
   const p = game.player;
   const ps = worldToScreen(p.shoulderX, p.shoulderY);
-  const playerCmd = input.getCommand(ps.x, ps.y);
-  if (p.alive && input.touchMode && input.rightStick) applyAimAssist(playerCmd, CONFIG.touch.aimAssist.strength);
+  const playerCmd = input.getCommand(ps.x, ps.y, dt);
+  if (p.alive && input.touchMode) {
+    if (input.rightStick) applyAimAssist(playerCmd, aimAssistStrength(options));
+    // Tir automatique : on tire seul dès qu'un ennemi est dans le viseur
+    if (options.autoFire && enemyInSights(playerCmd)) playerCmd.fire = true;
+  }
   if (updateMatch(dt, playerCmd)) {
     setState('over');
     return;
@@ -148,7 +173,7 @@ function update(dt) {
 function handleMenuTaps() {
   let tap;
   while ((tap = input.takeTap())) {
-    const id = hitMenu(menuButtons(state, view, game), tap);
+    const id = hitMenu(menuButtons(state, view, menuCtx), tap);
     if (id === 'play') {
       wantFullscreen = true;       // fait au moment où le doigt se lève (voir plus bas)
       beginMatch();
@@ -156,12 +181,20 @@ function handleMenuTaps() {
       beginMatch();
     } else if (id === 'mainmenu') {
       goToMainMenu();
+    } else if (id === 'options') {
+      optionsReturn = state;
+      setState('options');
+    } else if (id === 'back') {
+      setState(optionsReturn);
+    } else if (id && id.startsWith('opt:')) {
+      const [, key, dir] = id.split(':');
+      cycleOption(options, key, Number(dir));
+      applyOptions();
+      sound.play('switch');
     } else if (id && id.includes(':')) {
       changeSetting(id);
     } else if (id === 'resume') {
       setState('playing');
-    } else if (id === 'sound') {
-      sound.toggleMute();
     }
   }
 }
@@ -256,7 +289,7 @@ function render() {
     drawTouchControls(ctx, input);
     drawPauseButton(ctx, input);
   } else {
-    drawMenu(ctx, state, view, game);
+    drawMenu(ctx, state, view, menuCtx);
   }
 }
 
@@ -358,6 +391,15 @@ window.addEventListener('pointerup', onGestureEnd);
 window.addEventListener('touchend', onGestureEnd);
 window.addEventListener('click', onGestureEnd);
 
+// Bouton / geste "retour" du téléphone : pendant une partie, il met en
+// pause (ou ferme les Options) au lieu de quitter la page
+window.addEventListener('popstate', () => {
+  if (!game.player) return;                    // sur le menu : retour normal
+  if (state === 'playing') setState('paused');
+  else if (state === 'options') setState(optionsReturn);
+  try { history.pushState({ jeu: 1 }, ''); } catch (_) { /* rien */ }
+});
+
 // Si on quitte l'application pendant la partie → pause
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'playing') setState('paused');
@@ -375,6 +417,8 @@ window.__debug = () => ({
     kills: f.kills, deaths: f.deaths, x: Math.round(f.x), y: Math.round(f.y) })),
 });
 window.__game = game;   // (tests automatiques uniquement)
+window.__input = input;
+window.__menuButtons = () => menuButtons(state, view, menuCtx);
 
 centerMenuCamera();
 requestAnimationFrame(frame);

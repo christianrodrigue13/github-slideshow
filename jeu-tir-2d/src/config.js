@@ -177,12 +177,30 @@ export const CONFIG = {
   // --- Contrôles tactiles ---
   touch: {
     stickRadius: 0.11,       // rayon du joystick (fraction de la hauteur d'écran)
+    buttonRadius: 0.085,     // rayon des boutons tactiles (fraction de la hauteur d'écran)
+    fixedStickY: 0.72,       // hauteur des joysticks fixes (fraction de la hauteur d'écran)
     deadZone: 0.18,          // zone morte du joystick (0 à 1)
     jetThreshold: 0.45,      // pousser le joystick gauche au-delà = jetpack
     fireThreshold: 0.35,     // pousser le joystick droit au-delà = tir
-    aimAssist: {             // aide à la visée (téléphone seulement)
+    aimAssist: {             // aide à la visée (téléphone seulement ; force : voir options)
       angle: 0.14,           // agit si un ennemi est à moins de ~8° du viseur (radians)
-      strength: 0.6,         // 0 = aucune aide, 1 = visée verrouillée sur l'ennemi
+    },
+  },
+
+  // --- Options du joueur (écran Options) : valeurs proposées ---
+  options: {
+    // vitesse à laquelle la visée suit le joystick droit (radians/seconde)
+    sensitivity: { basse: 7, moyenne: 14, haute: 60 },
+    // force de l'aide à la visée (0 = aucune, 1 = verrouillée)
+    aimAssist: { off: 0, faible: 0.35, moyenne: 0.6 },
+    // tremblement d'écran (multiplicateur)
+    shake: { off: 0, faible: 0.5, normal: 1 },
+    volumes: [0, 0.25, 0.5, 0.75, 1],
+    autoFireAngle: 0.1,      // tir auto : l'ennemi doit être à moins de ~6° du viseur
+    // réglages au premier lancement
+    defaults: {
+      sensitivity: 'moyenne', aimAssist: 'faible', autoFire: false, vibration: true,
+      volume: 0.5, shake: 'normal', leftHanded: false, fixedSticks: false,
     },
   },
 
@@ -190,7 +208,6 @@ export const CONFIG = {
   feedback: {
     vibrateOnShoot: 8,       // durée de vibration en ms (0 = désactivé)
     vibrateOnHit: 45,
-    volume: 0.5,             // volume général (0 à 1)
   },
 
   // --- Effets visuels ---

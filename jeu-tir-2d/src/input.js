@@ -36,6 +36,15 @@ export class Input {
     // Fonction appelée au premier geste (sert à démarrer le son)
     this.onFirstGesture = null;
 
+    // Options tactiles (remplies par main.js depuis l'écran Options)
+    this.leftHanded = false;       // inverse les côtés (joystick de visée à gauche)
+    this.fixedSticks = false;      // joysticks à une place fixe au lieu de flottants
+    this.aimSpeed = 14;            // vitesse à laquelle la visée suit le pouce (rad/s)
+    this.aimAngle = 0;             // angle de visée actuel (lissé)
+
+    // Doigt maintenu sur un menu (pour l'appui long sur le titre)
+    this.hold = null;              // { x, y, time }
+
     this.buttons = this.layoutButtons();
     this.bindEvents();
   }
@@ -48,16 +57,39 @@ export class Input {
     this.buttons = this.layoutButtons();
   }
 
-  // Position des boutons tactiles (en pixels CSS)
+  // Applique les options du joueur (appelé quand elles changent)
+  setOptions({ leftHanded, fixedSticks, aimSpeed }) {
+    this.leftHanded = leftHanded;
+    this.fixedSticks = fixedSticks;
+    this.aimSpeed = aimSpeed;
+    this.buttons = this.layoutButtons();
+    this.releaseAll();
+  }
+
+  // Position des boutons tactiles (en pixels CSS). Ils sont sur le côté
+  // du pouce qui vise (à droite, ou à gauche en mode gaucher), sur une
+  // ligne, assez gros et assez espacés pour ne jamais se chevaucher.
   layoutButtons() {
-    const r = Math.max(24, this.h * 0.07);
+    const r = Math.max(30, this.h * CONFIG.touch.buttonRadius);
+    const edge = this.leftHanded ? 0 : this.w - (this.safeR || 0);
+    const side = this.leftHanded ? 1 : -1;      // vers l'intérieur de l'écran
+    const m = 14 + r;                            // marge depuis le bord
+    const y = this.h * 0.43;
     const right = this.w - (this.safeR || 0);
-    const m = 14 + r;               // marge depuis le bord
     return {
-      pause:  { x: right - 34, y: 34, r: 22, label: 'II' },
-      reload: { x: right - m, y: this.h * 0.36, r, label: 'R' },
-      swap:   { x: right - m - r * 2.5, y: this.h * 0.30, r, label: '⇄' },
+      pause:  { x: right - 36, y: 36, r: 26, label: 'II' },
+      reload: { x: edge + side * m, y, r, label: 'R' },
+      swap:   { x: edge + side * (m + r * 2.6), y, r, label: '⇄' },
     };
+  }
+
+  // Centre des joysticks fixes : déplacement et visée
+  fixedStickCenter(which) {
+    const y = this.h * CONFIG.touch.fixedStickY;
+    const moveLeft = !this.leftHanded;
+    const leftX = this.w * 0.14, rightX = this.w * 0.86;
+    if (which === 'move') return { x: moveLeft ? leftX : rightX, y };
+    return { x: moveLeft ? rightX : leftX, y };
   }
 
   stickRadius() {
@@ -124,7 +156,7 @@ export class Input {
     if (e.pointerType === 'mouse') {
       this.touchMode = false;
       this.mouse.x = x; this.mouse.y = y; this.mouse.used = true;
-      if (this.uiMode) { this.taps.push({ x, y }); return; }
+      if (this.uiMode) { this.taps.push({ x, y }); this.hold = { x, y, time: performance.now() }; return; }
       if (this.hitButton(this.buttons.pause, x, y)) { this.pending.pause = true; return; }
       if (e.button === 0) this.mouse.down = true;
       if (e.button === 2) this.pending.reload = true;
@@ -135,7 +167,7 @@ export class Input {
     this.touchMode = true;
     try { this.canvas.setPointerCapture(e.pointerId); } catch (_) { /* rien */ }
 
-    if (this.uiMode) { this.taps.push({ x, y }); return; }
+    if (this.uiMode) { this.taps.push({ x, y }); this.hold = { x, y, time: performance.now() }; return; }
 
     // Boutons d'abord
     const b = this.buttons;
@@ -143,10 +175,16 @@ export class Input {
     if (this.hitButton(b.reload, x, y)) { this.pending.reload = true; return; }
     if (this.hitButton(b.swap, x, y)) { this.pending.switchWeapon = true; return; }
 
-    // Moitié gauche = déplacement, moitié droite = visée/tir.
-    // Le joystick apparaît là où le doigt se pose.
-    const stick = { id: e.pointerId, ox: x, oy: y, x, y };
-    if (x < this.w / 2) {
+    // Une moitié de l'écran = déplacement, l'autre = visée/tir
+    // (gauche/droite inversés en mode gaucher).
+    // Joystick flottant : il apparaît là où le doigt se pose.
+    // Joystick fixe : son centre ne bouge pas, le doigt peut se poser n'importe
+    // où dans sa moitié d'écran.
+    const moveSide = (x < this.w / 2) !== this.leftHanded;
+    const which = moveSide ? 'move' : 'aim';
+    const c = this.fixedSticks ? this.fixedStickCenter(which) : { x, y };
+    const stick = { id: e.pointerId, ox: c.x, oy: c.y, x, y };
+    if (moveSide) {
       if (!this.leftStick) this.leftStick = stick;
     } else if (!this.rightStick) {
       this.rightStick = stick;
@@ -161,11 +199,11 @@ export class Input {
     for (const s of [this.leftStick, this.rightStick]) {
       if (s && s.id === e.pointerId) {
         s.x = e.clientX; s.y = e.clientY;
-        // Si le doigt va trop loin, le centre du joystick le suit
+        // Joystick flottant : si le doigt va trop loin, le centre le suit
         const R = this.stickRadius();
         const dx = s.x - s.ox, dy = s.y - s.oy;
         const d = Math.hypot(dx, dy);
-        if (d > R * 1.6) {
+        if (!this.fixedSticks && d > R * 1.6) {
           s.ox = s.x - (dx / d) * R * 1.6;
           s.oy = s.y - (dy / d) * R * 1.6;
         }
@@ -174,6 +212,7 @@ export class Input {
   }
 
   onUp(e) {
+    this.hold = null;
     if (e.pointerType === 'mouse') {
       if (e.button === 0) this.mouse.down = false;
       return;
@@ -183,6 +222,7 @@ export class Input {
   }
 
   releaseAll() {
+    this.hold = null;
     this.keys.clear();
     this.mouse.down = false;
     this.leftStick = null;
@@ -215,12 +255,14 @@ export class Input {
     return p;
   }
 
-  // Construit la commande du joueur pour cette mise à jour.
+  // Construit la commande du joueur pour cette mise à jour (dt en secondes).
   // (px, py) = position du joueur à l'écran, pour viser à la souris.
-  getCommand(px, py) {
+  // L'objet renvoyé est réutilisé d'une fois sur l'autre (pas d'allocation).
+  getCommand(px, py, dt) {
     const k = this.keys;
-    const cmd = { moveX: 0, up: false, aimX: this.lastAim.x, aimY: this.lastAim.y,
-                  fire: false, switchWeapon: false, reload: false };
+    const cmd = this.cmd || (this.cmd = {});
+    cmd.moveX = 0; cmd.up = false; cmd.aimX = this.lastAim.x; cmd.aimY = this.lastAim.y;
+    cmd.fire = false; cmd.switchWeapon = false; cmd.reload = false;
 
     // Clavier
     if (k.has('KeyA') || k.has('ArrowLeft')) cmd.moveX -= 1;
@@ -237,14 +279,28 @@ export class Input {
     // Joystick droit : viser, et tirer tant qu'on pousse assez loin
     const Rv = this.stickValue(this.rightStick);
     if (Rv.mag > 0) {
-      cmd.aimX = Rv.x / Rv.mag; cmd.aimY = Rv.y / Rv.mag;
+      // La visée tourne vers la direction du pouce à une vitesse limitée
+      // (option "sensibilité") : plus doux et plus précis au doigt
+      const target = Math.atan2(Rv.y, Rv.x);
+      let diff = Math.atan2(Math.sin(target - this.aimAngle), Math.cos(target - this.aimAngle));
+      const maxStep = this.aimSpeed * dt;
+      if (Math.abs(diff) > maxStep) diff = Math.sign(diff) * maxStep;
+      // premier contact : on part directement de la nouvelle direction si elle est loin
+      if (!this.aiming) diff = target - this.aimAngle;
+      this.aimAngle += diff;
+      cmd.aimX = Math.cos(this.aimAngle); cmd.aimY = Math.sin(this.aimAngle);
       cmd.fire = Rv.mag > CONFIG.touch.fireThreshold;
+      this.aiming = true;
     } else if (!this.touchMode && this.mouse.used) {
       // Souris : on vise le curseur
       const dx = this.mouse.x - px, dy = this.mouse.y - py;
       const d = Math.hypot(dx, dy);
       if (d > 1) { cmd.aimX = dx / d; cmd.aimY = dy / d; }
       cmd.fire = this.mouse.down;
+    }
+    if (Rv.mag === 0) {
+      this.aiming = false;
+      this.aimAngle = Math.atan2(cmd.aimY, cmd.aimX);
     }
     this.lastAim.x = cmd.aimX; this.lastAim.y = cmd.aimY;
 
