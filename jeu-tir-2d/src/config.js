@@ -149,6 +149,9 @@ export const CONFIG = {
       color: '#ff8787',
       botRange: [180, 900],
     },
+    // Grenade : ce n'est PAS une arme à porter. Elle se lance avec le bouton
+    // grenade (touche G) ; ce bloc donne ses caractéristiques. Le nombre de
+    // grenades portées est réglé plus bas (bloc "grenades").
     {
       id: 'grenade',
       short: 'GRE',          // abréviation (caisses d'armes)
@@ -180,7 +183,7 @@ export const CONFIG = {
     shieldRespawn: 20,
     weaponRespawn: 12,
     ammoRespawn: 12,         // une caisse de munitions remplit la réserve des 2 armes
-    crateWeapons: ['smg', 'shotgun', 'sniper', 'rocket', 'grenade'],  // contenu possible des caisses
+    crateWeapons: ['smg', 'shotgun', 'sniper', 'rocket'],  // contenu possible des caisses
   },
 
   // --- Mode Roi de la colline ---
@@ -214,7 +217,7 @@ export const CONFIG = {
     tireur:   { label: 'Tireur', tag: '◎', preferredDistance: 620, secondary: 'sniper',
                 likes: ['sniper', 'rocket'], burstPause: 0.6, healthSeek: 45, retreatHealth: 0, tooClose: 280 },
     prudent:  { label: 'Prudent', tag: '✚', preferredDistance: 380, secondary: 'smg',
-                likes: ['smg', 'grenade', 'rocket'], burstPause: 0.7, healthSeek: 70, retreatHealth: 40, tooClose: 0 },
+                likes: ['smg', 'rocket', 'sniper'], burstPause: 0.7, healthSeek: 70, retreatHealth: 40, tooClose: 0 },
   },
 
   // --- Difficulté (choisie dans le menu) ---
@@ -305,6 +308,15 @@ export const CONFIG = {
 
   // Gravité appliquée aux grenades
   grenadeGravity: 1300,
+
+  // --- Grenades (bouton grenade / touche G) ---
+  grenades: {
+    start: 2,                // grenades à chaque apparition
+    max: 4,                  // on ne peut pas en porter plus
+    perAmmoCrate: 2,         // grenades rendues par une caisse de munitions
+    cooldown: 0.7,           // délai minimum entre deux lancers (secondes)
+    botInterval: [4, 9],     // les bots lancent une grenade toutes les 4 à 9 s (si une cible est bien placée)
+  },
 
   // --- Minicarte ---
   minimap: {

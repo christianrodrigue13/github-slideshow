@@ -148,6 +148,7 @@ Le jeu s'ouvrira alors en plein écran, sans la barre d'adresse.
 | Pousser le joystick droit **assez loin** | **tirer** (tant qu'on pousse) |
 | Bouton **⇄** | changer d'arme |
 | Bouton **R** | recharger |
+| Bouton **grenade** (avec le nombre restant) | lancer une grenade là où on vise |
 | Bouton **II** (en haut à droite) | pause |
 | Bouton **retour** du téléphone | met en pause (ne quitte pas le jeu) |
 
@@ -163,6 +164,7 @@ inversés), joysticks fixes ou flottants, sensibilité, aide à la visée, tir a
 | **Souris** | viser |
 | **Clic gauche** maintenu | tirer |
 | **R** ou clic droit | recharger |
+| **G** ou clic molette | lancer une grenade |
 | **E**, **1**, **2** ou molette | changer d'arme |
 | **Échap** ou **P** | pause / retour |
 
@@ -211,7 +213,11 @@ tenue à deux mains ; elle recule à chaque tir et s'incline pendant le recharge
 | Fusil à pompe | 7 plombs, dévastateur de près |
 | Fusil de précision | 70 dégâts, très longue portée, laser rouge, la caméra dézoome |
 | Lance-roquettes | explose à l'impact, dégâts de zone, forte projection (la roquette est visible quand il est chargé) |
-| Grenades | lancer en arc (trajectoire affichée), explosion après 1,8 s |
+
+**Grenades** : ce n'est pas une arme, c'est un équipement à part, avec son propre
+bouton. On en a **2 au départ** (maximum 4) ; elles partent en arc vers là où on
+vise et explosent après 1,8 s. Le nombre restant s'affiche à côté des munitions
+(« ×2 ») et sur le bouton (grisé quand il n'y en a plus).
 
 Les **munitions sont limitées** : chiffre en gros = chargeur, en petit = réserve.
 Une arme vide passe automatiquement à l'autre.
@@ -220,7 +226,7 @@ Une arme vide passe automatiquement à l'autre.
 
 - **Trousse blanche à croix rouge** : +50 PV.
 - **Écusson bleu** : bouclier de 50 points (bulle bleue autour du personnage).
-- **Caisse verte avec cartouches** : remplit la réserve de munitions des 2 armes.
+- **Caisse verte avec cartouches** : remplit la réserve de munitions des 2 armes et donne **+2 grenades**.
 - **Caisse en bois** : une arme.
 
 ### Les bots
@@ -300,6 +306,7 @@ Change un nombre, enregistre, recharge la page.
 | changer les caractères des bots | `personalities` (distance préférée, armes, replis…) |
 | modifier une arme | son bloc dans `weapons` (`damage`, `fireRate`, `magazine`, `reserve`…) |
 | plus ou moins de munitions | `reserve` de chaque arme (`Infinity` = illimité) |
+| plus ou moins de grenades | `grenades` : `start`, `max`, `perAmmoCrate`, `cooldown` |
 | une explosion plus grosse | `blastRadius` et `knockback` de `rocket` / `grenade` |
 | plus de soin / bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
 | des objets qui reviennent plus vite | `pickups.healthRespawn`, `ammoRespawn`, `weaponRespawn`… |

@@ -166,6 +166,8 @@ export const game = {
         pa.vx = -Math.cos(f.aimAngle) * 80 + (Math.random() - 0.5) * 40;
         pa.vy = -160 - Math.random() * 60;
       }
+    } else if (name === 'throw') {
+      game.sound.play('grenade', vol);            // le "fouit" du lancer
     } else if (f === game.player) {
       game.sound.play(name);                     // 'reload', 'switch', 'empty'
     }

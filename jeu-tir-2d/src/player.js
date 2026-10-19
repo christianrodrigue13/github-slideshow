@@ -44,6 +44,9 @@ export class Fighter {
     this.weapons = [];
     this.resetWeapons();
     this.muzzleFlash = 0;        // durée restante de l'éclair au bout du canon
+    this.grenades = CONFIG.grenades.start;   // grenades portées (bouton grenade)
+    this.throwCooldown = 0;
+    this.throwAnim = 0;          // petite animation du bras qui lance
 
     // Partie
     this.kills = 0;
@@ -77,6 +80,8 @@ export class Fighter {
     this.alive = true;
     this.fuel = CONFIG.jetpack.maxFuel;
     this.resetWeapons();
+    this.grenades = CONFIG.grenades.start;
+    this.throwCooldown = 0;
     this.protectTimer = CONFIG.rules.spawnProtection;
     this.hitFlash = 0;
     this.jetting = false;
@@ -164,6 +169,11 @@ export class Fighter {
 
   updateWeapons(cmd, dt, game) {
     if (this.muzzleFlash > 0) this.muzzleFlash -= dt;
+    if (this.throwCooldown > 0) this.throwCooldown -= dt;
+    if (this.throwAnim > 0) this.throwAnim -= dt;
+
+    // Lancer de grenade (bouton à part : on garde son arme en main)
+    if (cmd.throwGrenade && this.grenades > 0 && this.throwCooldown <= 0) this.throwGrenade(game);
     for (const w of this.weapons) w.update(dt);
 
     if (cmd.switchWeapon) {
@@ -191,6 +201,18 @@ export class Fighter {
     } else {
       this.emptyClick = false;
     }
+  }
+
+  // Lance une grenade dans la direction visée
+  throwGrenade(game) {
+    const def = weaponDef('grenade');
+    game.bullets.push(new Grenade(this.shoulderX, this.shoulderY - 4, this.aimAngle, def, this));
+    this.grenades--;
+    this.throwCooldown = CONFIG.grenades.cooldown;
+    this.throwAnim = 0.25;
+    this.protectTimer = 0;                   // lancer annule l'invincibilité
+    this.lastShotTime = game.time;
+    game.onFighterEvent(this, 'throw');
   }
 
   // Fait partir un tir (un ou plusieurs plombs) + recul
@@ -336,6 +358,22 @@ export class Fighter {
       flash: this.muzzleFlash > 0,
       handColor: dark,
     });
+    // Bras qui lance une grenade : il passe de l'arrière vers l'avant
+    if (this.throwAnim > 0) {
+      const t = 1 - this.throwAnim / 0.25;                  // 0 → 1
+      const side = Math.cos(this.aimAngle) < 0 ? -1 : 1;
+      const a = this.aimAngle - (1 - t) * 2 * side;
+      const hx = this.shoulderX + Math.cos(a) * 13, hy = this.shoulderY - 3 + Math.sin(a) * 13;
+      ctx.strokeStyle = dark;
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(this.shoulderX, this.shoulderY - 3);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.fillStyle = dark;
+      ctx.beginPath(); ctx.arc(hx, hy, 2.4, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.globalAlpha = 1;
 
     // --- Bouclier : bulle bleue autour du personnage ---

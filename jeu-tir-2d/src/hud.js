@@ -54,8 +54,14 @@ export function drawHUD(ctx, game, view, pp) {
   ctx.font = font(13 * u);
   ctx.fillStyle = w.def.color;
   ctx.fillText(w.def.name, x, y);
-  // Dessin de l'arme en main, à droite des munitions
-  drawWeaponIcon(ctx, w.def.id, x + 118 * u, y + 17 * u, (w.def.id === 'grenade' ? 18 : 54) * u, w.def.color);
+  // Dessin de l'arme en main, à droite des munitions, puis les grenades
+  drawWeaponIcon(ctx, w.def.id, x + 118 * u, y + 17 * u, 54 * u, w.def.color);
+  ctx.globalAlpha = p.grenades > 0 ? 1 : 0.35;
+  drawWeaponIcon(ctx, 'grenade', x + 162 * u, y + 17 * u, 14 * u, '#b2f2bb');
+  ctx.globalAlpha = 1;
+  ctx.font = font(12 * u);
+  ctx.fillStyle = p.grenades > 0 ? '#fff' : '#ff8787';
+  ctx.fillText(`×${p.grenades}`, x + 171 * u, y + 18 * u);
   // L'autre arme, en petit et grisée
   const other = p.weapons[1 - p.weaponIndex];
   const nameW = ctx.measureText(w.def.name).width;
@@ -310,6 +316,28 @@ export function drawTouchControls(ctx, input) {
   const hintY = input.fixedSticks ? 0.92 : 0.82;
   if (!input.leftStick) ctx.fillText('bouger / voler', input.w * moveX, input.h * hintY);
   if (!input.rightStick) ctx.fillText('viser / tirer', input.w * aimX, input.h * hintY);
+
+  // Bouton grenade : dessin de grenade + nombre restant (grisé s'il n'y en a plus)
+  const gb = input.buttons.grenade, count = input.grenadeCount ?? 0;
+  ctx.globalAlpha = count > 0 ? 1 : 0.4;
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.strokeStyle = 'rgba(178,242,187,0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(gb.x, gb.y, gb.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  drawWeaponIcon(ctx, 'grenade', gb.x, gb.y, gb.r * 0.75, '#b2f2bb');
+  ctx.fillStyle = '#1b2440';
+  ctx.beginPath();
+  ctx.arc(gb.x + gb.r * 0.68, gb.y - gb.r * 0.68, gb.r * 0.36, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = count > 0 ? '#ffe066' : '#ff8787';
+  ctx.font = font(gb.r * 0.42);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(count), gb.x + gb.r * 0.68, gb.y - gb.r * 0.68 + 1);
+  ctx.globalAlpha = 1;
 
   // Boutons recharger / changer d'arme
   for (const b of [input.buttons.reload, input.buttons.swap]) {

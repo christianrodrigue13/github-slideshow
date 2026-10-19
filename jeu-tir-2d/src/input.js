@@ -2,7 +2,7 @@
 // input.js — Lit le clavier, la souris et l'écran tactile, et les
 // transforme en une "commande" neutre :
 //
-//   { moveX, up, aimX, aimY, fire, switchWeapon, reload }
+//   { moveX, up, aimX, aimY, fire, switchWeapon, reload, throwGrenade }
 //
 // Le personnage (player.js) ne sait PAS d'où vient la commande :
 // un bot fabrique la même commande, et plus tard un joueur en ligne
@@ -27,7 +27,7 @@ export class Input {
     this.lastAim = { x: 1, y: 0 }; // dernière direction de visée connue
 
     // Actions "une seule fois" (consommées à la mise à jour suivante)
-    this.pending = { switchWeapon: false, reload: false, pause: false };
+    this.pending = { switchWeapon: false, reload: false, pause: false, throwGrenade: false };
     // Touchers/clics sur les menus (positions écran)
     this.taps = [];
     // Quand un menu est affiché, tout toucher devient un "tap" de menu
@@ -77,9 +77,10 @@ export class Input {
     const y = this.h * 0.43;
     const right = this.w - (this.safeR || 0);
     return {
-      pause:  { x: right - 36, y: 36, r: 26, label: 'II' },
-      reload: { x: edge + side * m, y, r, label: 'R' },
-      swap:   { x: edge + side * (m + r * 2.6), y, r, label: '⇄' },
+      pause:   { x: right - 36, y: 36, r: 26, label: 'II' },
+      reload:  { x: edge + side * m, y, r, label: 'R' },
+      swap:    { x: edge + side * (m + r * 2.6), y, r, label: '⇄' },
+      grenade: { x: edge + side * (m + r * 5.2), y, r, label: '' },   // dessin de grenade (hud.js)
     };
   }
 
@@ -109,6 +110,7 @@ export class Input {
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'KeyR') this.pending.reload = true;
+      if (e.code === 'KeyG') this.pending.throwGrenade = true;
       if (e.code === 'KeyE' || e.code === 'Digit1' || e.code === 'Digit2' ||
           e.code === 'Tab') this.pending.switchWeapon = true;
       if (e.code === 'Escape' || e.code === 'KeyP') this.pending.pause = true;
@@ -134,6 +136,9 @@ export class Input {
     c.addEventListener('pointerup', (e) => this.onUp(e));
     c.addEventListener('pointercancel', (e) => this.onUp(e));
     c.addEventListener('contextmenu', (e) => e.preventDefault());
+    // (le clic molette ne doit pas déclencher le défilement automatique du navigateur)
+    c.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+    c.addEventListener('auxclick', (e) => e.preventDefault());
 
     // Si on quitte l'onglet, on relâche tout (évite un personnage "bloqué")
     window.addEventListener('blur', () => this.releaseAll());
@@ -161,6 +166,7 @@ export class Input {
       if (this.uiMode) { this.taps.push({ x, y }); this.hold = { x, y, time: performance.now() }; return; }
       if (this.hitButton(this.buttons.pause, x, y)) { this.pending.pause = true; return; }
       if (e.button === 0) this.mouse.down = true;
+      if (e.button === 1) this.pending.throwGrenade = true;   // clic molette = grenade
       if (e.button === 2) this.pending.reload = true;
       return;
     }
@@ -176,6 +182,7 @@ export class Input {
     if (this.hitButton(b.pause, x, y)) { this.pending.pause = true; return; }
     if (this.hitButton(b.reload, x, y)) { this.pending.reload = true; return; }
     if (this.hitButton(b.swap, x, y)) { this.pending.switchWeapon = true; return; }
+    if (this.hitButton(b.grenade, x, y)) { this.pending.throwGrenade = true; return; }
 
     // Une moitié de l'écran = déplacement, l'autre = visée/tir
     // (gauche/droite inversés en mode gaucher).
@@ -264,7 +271,7 @@ export class Input {
     const k = this.keys;
     const cmd = this.cmd || (this.cmd = {});
     cmd.moveX = 0; cmd.up = false; cmd.aimX = this.lastAim.x; cmd.aimY = this.lastAim.y;
-    cmd.fire = false; cmd.switchWeapon = false; cmd.reload = false;
+    cmd.fire = false; cmd.switchWeapon = false; cmd.reload = false; cmd.throwGrenade = false;
 
     // Clavier
     if (k.has('KeyA') || k.has('ArrowLeft')) cmd.moveX -= 1;
@@ -309,8 +316,10 @@ export class Input {
     // Actions uniques
     cmd.switchWeapon = this.pending.switchWeapon;
     cmd.reload = this.pending.reload;
+    cmd.throwGrenade = this.pending.throwGrenade;
     this.pending.switchWeapon = false;
     this.pending.reload = false;
+    this.pending.throwGrenade = false;
     return cmd;
   }
 }

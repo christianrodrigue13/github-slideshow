@@ -213,6 +213,7 @@ function update(dt) {
   const p = game.player;
   const ps = worldToScreen(p.shoulderX, p.shoulderY);
   const playerCmd = input.getCommand(ps.x, ps.y, dt);
+  input.grenadeCount = p.grenades;              // (affiché sur le bouton grenade)
   if (p.alive && input.touchMode) {
     if (input.rightStick) applyAimAssist(playerCmd, aimAssistStrength(options));
     // Tir automatique : on tire seul dès qu'un ennemi est dans le viseur
@@ -398,8 +399,7 @@ function render() {
 }
 
 // Ligne de visée du joueur (repère monde) :
-// sniper = laser rouge, lance-grenades = trajectoire en arc,
-// autres armes = pointillés (seulement quand on vise au doigt)
+// fusil de précision = laser rouge, autres armes = pointillés (seulement quand on vise au doigt)
 function drawAimGuide() {
   const p = game.player;
   if (state !== 'playing' || !p.alive) return;
@@ -407,21 +407,7 @@ function drawAimGuide() {
   const x0 = p.shoulderX, y0 = p.shoulderY;
   const dx = Math.cos(p.aimAngle), dy = Math.sin(p.aimAngle);
   ctx.save();
-  if (def.kind === 'grenade') {
-    // On simule le vol de la grenade et on dessine des points
-    let x = x0, y = y0, vx = dx * def.bulletSpeed + p.vx * 0.5, vy = dy * def.bulletSpeed + p.vy * 0.3;
-    ctx.fillStyle = 'rgba(178,242,187,0.85)';
-    for (let i = 0; i < 30; i++) {
-      const nx = x + vx * 0.035, ny = y + vy * 0.035;
-      if (game.map.raycast(x, y, nx, ny) !== null) break;
-      x = nx; y = ny; vy += CONFIG.grenadeGravity * 0.035;
-      if (i >= 1) {
-        ctx.beginPath();
-        ctx.arc(x, y, Math.max(1.5, 4 - i * 0.08), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  } else if (def.id === 'sniper' || (input.touchMode && input.rightStick)) {
+  if (def.id === 'sniper' || (input.touchMode && input.rightStick)) {
     const len = def.id === 'sniper' ? def.range : 230;
     const x1 = x0 + dx * len, y1 = y0 + dy * len;
     const t = game.map.raycast(x0, y0, x1, y1) ?? 1;

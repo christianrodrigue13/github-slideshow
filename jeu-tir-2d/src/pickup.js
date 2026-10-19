@@ -39,7 +39,9 @@ export class Pickup {
   usefulFor(f) {
     if (this.type === 'health') return f.health < CONFIG.fighter.maxHealth;
     if (this.type === 'shield') return f.shield < CONFIG.pickups.shieldAmount;
-    if (this.type === 'ammo') return f.weapons.some((w) => w.reserve < (w.def.reserve ?? Infinity));
+    if (this.type === 'ammo') {
+      return f.weapons.some((w) => w.reserve < (w.def.reserve ?? Infinity)) || f.grenades < CONFIG.grenades.max;
+    }
     return f.weapons[1].def.id !== this.weaponId;
   }
 
@@ -53,6 +55,7 @@ export class Pickup {
       f.shield = P.shieldAmount;
     } else if (this.type === 'ammo') {
       for (const w of f.weapons) w.restock();
+      f.grenades = Math.min(CONFIG.grenades.max, f.grenades + CONFIG.grenades.perAmmoCrate);
     } else {
       f.giveSecondary(this.weaponId);
     }

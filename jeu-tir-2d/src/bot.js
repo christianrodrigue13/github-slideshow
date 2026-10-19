@@ -4,7 +4,7 @@
 // Le personnage lui-même (player.js) est identique pour tout le monde.
 // =====================================================================
 
-import { CONFIG } from './config.js';
+import { CONFIG, weaponDef } from './config.js';
 
 export class BotBrain {
   // skill = { aimError, reactionTime, aggression } : vient de la difficulté choisie
@@ -31,6 +31,7 @@ export class BotBrain {
     this.climbTimer = 0;        // vol forcé pour passer un obstacle
     this.lastSeen = -99;        // dernier moment où la cible était visible
     this.ignoreGoalsUntil = 0;  // objets ignorés jusqu'à ce moment
+    this.grenadeTimer = 2 + Math.random() * 4;   // délai avant la prochaine grenade
     this.ceilDir = 1;           // côté choisi pour contourner un plafond
     this.ceilRect = null;
     this.ceilTimer = 0;
@@ -48,7 +49,7 @@ export class BotBrain {
     const B = CONFIG.bots;
     const map = game.map;
     const cmd = { moveX: 0, up: false, aimX: this.aim.x, aimY: this.aim.y,
-                  fire: false, switchWeapon: false, reload: false };
+                  fire: false, switchWeapon: false, reload: false, throwGrenade: false };
     if (!me.alive) return cmd;
 
     // ---------- 1. Choisir une cible ----------
@@ -237,6 +238,20 @@ export class BotBrain {
       this.aim.x = dir; this.aim.y = 0;
     }
     cmd.aimX = this.aim.x; cmd.aimY = this.aim.y;
+
+    // ---------- 4 bis. Grenade (de temps en temps, cible visible à bonne distance) ----------
+    this.grenadeTimer -= dt;
+    if (visible && me.grenades > 0 && this.grenadeTimer <= 0 && dist > 150 && dist < 560 &&
+        this.seeTimer >= this.skill.reactionTime) {
+      const gdef = weaponDef('grenade');
+      const flight = dist / gdef.bulletSpeed;
+      const ty = t.cy - 0.5 * CONFIG.grenadeGravity * flight * flight;   // on vise plus haut (chute)
+      const a = Math.atan2(ty - me.shoulderY, t.cx - me.shoulderX) + this.aimOffset;
+      cmd.aimX = Math.cos(a); cmd.aimY = Math.sin(a);
+      cmd.throwGrenade = true;
+      const [lo, hi] = CONFIG.grenades.botInterval;
+      this.grenadeTimer = lo + Math.random() * (hi - lo);
+    }
 
     // ---------- 5. Choisir l'arme ----------
     this.switchCooldown -= dt;
