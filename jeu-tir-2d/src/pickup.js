@@ -5,6 +5,7 @@
 // =====================================================================
 
 import { CONFIG, weaponDef } from './config.js';
+import { drawWeaponIcon } from './weaponart.js';
 
 export class Pickup {
   // spot = { x, y, type } : x = centre, y = surface du sol sous l'objet
@@ -123,16 +124,17 @@ export class Pickup {
       ctx.fillRect(x0 + 2, y0 + 14, s - 4, 3);
     } else {
       const def = weaponDef(this.weaponId);
-      ctx.fillStyle = '#8d6e4a';                       // caisse en bois
-      ctx.fillRect(x0 - 2, y0, s + 4, s);
+      // caisse en bois ouverte, avec l'arme posée dessus
+      ctx.fillStyle = '#8d6e4a';
+      ctx.fillRect(x0 - 2, y0 + 10, s + 4, s - 10);
       ctx.strokeStyle = '#5c4630';
       ctx.lineWidth = 2;
-      ctx.strokeRect(x0 - 1, y0 + 1, s + 2, s - 2);
-      ctx.fillStyle = def.color;                       // initiale de l'arme
-      ctx.font = 'bold 10px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(def.short, this.x, y + 1);
+      ctx.strokeRect(x0 - 1, y0 + 11, s + 2, s - 12);
+      ctx.fillStyle = '#5c4630';
+      ctx.fillRect(x0 + 3, y0 + 15, s - 6, 2);
+      ctx.fillStyle = def.color;                       // petite bande de la couleur de l'arme
+      ctx.fillRect(x0 - 2, y0 + s - 4, s + 4, 2);
+      drawWeaponIcon(ctx, def.id, this.x, y0 + 6, def.id === 'grenade' ? 14 : 38, def.color);
     }
   }
 }

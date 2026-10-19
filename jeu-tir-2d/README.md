@@ -201,16 +201,17 @@ En haut à gauche : ton **niveau** et ta barre d'XP. Tous tes choix sont mémori
 
 Tu portes **2 armes** : le **fusil auto** (toujours) et une **arme secondaire**
 (au départ le fusil à pompe), remplacée en ramassant une **caisse en bois**
-(l'abréviation sur la caisse dit l'arme dedans).
+(l'arme est posée sur la caisse). Chaque arme a son propre dessin détaillé,
+tenue à deux mains ; elle recule à chaque tir et s'incline pendant le rechargement.
 
-| Arme | Caisse | En bref |
-|---|---|---|
-| Fusil auto | — | rafales rapides, bonne portée |
-| Pistolet-mitrailleur | PM | tire très vite, faibles dégâts, courte portée |
-| Fusil à pompe | POM | 7 plombs, dévastateur de près |
-| Fusil de précision | PRÉ | 70 dégâts, très longue portée, laser rouge, la caméra dézoome |
-| Lance-roquettes | ROQ | explose à l'impact, dégâts de zone, forte projection |
-| Grenades | GRE | lancer en arc (trajectoire affichée), explosion après 1,8 s |
+| Arme | En bref |
+|---|---|
+| Fusil auto | rafales rapides, bonne portée |
+| Pistolet-mitrailleur | tire très vite, faibles dégâts, courte portée |
+| Fusil à pompe | 7 plombs, dévastateur de près |
+| Fusil de précision | 70 dégâts, très longue portée, laser rouge, la caméra dézoome |
+| Lance-roquettes | explose à l'impact, dégâts de zone, forte projection (la roquette est visible quand il est chargé) |
+| Grenades | lancer en arc (trajectoire affichée), explosion après 1,8 s |
 
 Les **munitions sont limitées** : chiffre en gros = chargeur, en petit = réserve.
 Une arme vide passe automatiquement à l'autre.
@@ -334,6 +335,7 @@ jeu-tir-2d/
     ├── bot.js       IA (personnalités) : fabrique la même commande qu'un joueur
     ├── weapon.js    chargeur, réserve, cadence, rechargement
     ├── bullet.js    projectiles : balles, roquettes, grenades
+    ├── weaponart.js dessin détaillé des armes (en main, sur les caisses, dans l'interface)
     ├── pickup.js    objets à ramasser
     ├── map.js       les 3 cartes (formes, points d'apparition, objets), collisions
     ├── scenery.js   décors de l'Archipel : ciels, plans en parallaxe, textures, météo, lumières

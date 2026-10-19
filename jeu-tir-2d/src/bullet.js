@@ -7,6 +7,7 @@
 
 import { segmentVsRect } from './map.js';
 import { CONFIG } from './config.js';
+import { drawWeaponIcon } from './weaponart.js';
 
 export class Bullet {
   constructor(x, y, angle, def, owner) {
@@ -193,10 +194,11 @@ export class Grenade {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.spin);
-    ctx.fillStyle = '#4b6b4f';
-    ctx.fillRect(-5, -5, 10, 10);
-    ctx.fillStyle = this.fuse < 0.4 && Math.floor(this.fuse * 20) % 2 === 0 ? '#ff4d4d' : this.def.color;
-    ctx.fillRect(-2, -2, 4, 4);                 // voyant qui clignote avant d'exploser
+    drawWeaponIcon(ctx, 'grenade', 0, 0, 13, this.def.color);   // même dessin que la grenade en main
+    if (this.fuse < 0.6 && Math.floor(this.fuse * 20) % 2 === 0) {
+      ctx.fillStyle = '#ff4d4d';                // voyant qui clignote avant d'exploser
+      ctx.beginPath(); ctx.arc(0, -4, 2, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
 }

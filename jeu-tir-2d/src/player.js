@@ -7,19 +7,11 @@
 import { CONFIG, weaponDef } from './config.js';
 import { Weapon } from './weapon.js';
 import { Bullet, Rocket, Grenade } from './bullet.js';
+import { drawHeldWeapon } from './weaponart.js';
 
 // Projectile tiré selon le type d'arme
 const PROJECTILE = { bullet: Bullet, rocket: Rocket, grenade: Grenade };
 
-// Apparence de chaque arme : longueur, épaisseur, couleur de la crosse
-const GUN_LOOK = {
-  rifle:    { len: 27, thick: 5, stock: '#3d4356' },
-  shotgun:  { len: 22, thick: 7, stock: '#8c5a2b' },
-  sniper:   { len: 38, thick: 4, stock: '#2f3b52', scope: true },
-  smg:      { len: 20, thick: 6, stock: '#5c940d' },
-  rocket:   { len: 30, thick: 9, stock: '#c92a2a', tube: true },
-  grenade:  { len: 10, thick: 0, stock: '#4b6b4f', ball: true },
-};
 
 let nextId = 1;
 
@@ -334,52 +326,16 @@ export class Fighter {
     ctx.fillStyle = 'rgba(160,220,255,0.6)';
     ctx.fillRect(cx + (this.facing === 1 ? 5 : -7), y + 5, 2, 2);   // reflet
 
-    // --- Arme, orientée vers la visée, tenue par le bras ---
-    const look = GUN_LOOK[this.weapon.def.id] || GUN_LOOK.rifle;
-    const len = look.len;
-    ctx.save();
-    ctx.translate(this.shoulderX, this.shoulderY);
-    ctx.rotate(this.aimAngle);
-    if (look.ball) {                        // grenade tenue dans la main
-      if (this.weapon.ammo > 0) {
-        ctx.fillStyle = look.stock;
-        ctx.beginPath();
-        ctx.arc(13, 1, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ced4da';
-        ctx.fillRect(11, -6, 4, 3);
-      }
-    } else {
-      ctx.fillStyle = '#a3acbf';
-      ctx.fillRect(0, -3, len, look.thick);
-      ctx.fillStyle = look.stock;
-      ctx.fillRect(2, -3, 9, look.thick);
-    }
-    if (look.tube) {                        // embout du lance-roquettes
-      ctx.fillStyle = '#495057';
-      ctx.fillRect(len - 5, -5, 6, look.thick + 4);
-    }
-    if (look.scope) {                       // lunette du fusil de précision
-      ctx.fillStyle = '#1b2440';
-      ctx.fillRect(12, -7, 12, 4);
-    }
-    // Bras
-    ctx.strokeStyle = dark;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(-2, 1);
-    ctx.lineTo(12, 1);
-    ctx.stroke();
-    // Éclair au bout du canon (étoile à 4 branches)
-    if (this.muzzleFlash > 0 && !look.ball) {
-      ctx.fillStyle = '#fff3b0';
-      ctx.beginPath();
-      ctx.moveTo(len, -6); ctx.lineTo(len + 6, -1); ctx.lineTo(len + 16, 0);
-      ctx.lineTo(len + 6, 1); ctx.lineTo(len, 6); ctx.lineTo(len + 3, 0);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
+    // --- Arme, tenue à deux mains, orientée vers la visée (dessin : weaponart.js) ---
+    const wpn = this.weapon;
+    drawHeldWeapon(ctx, wpn.def.id, this.shoulderX, this.shoulderY, this.aimAngle, {
+      color: wpn.def.color,
+      kick: Math.max(0, this.muzzleFlash) / 0.05,          // recul juste après un tir
+      reload: wpn.reloading ? wpn.reloadProgress : 0,       // inclinaison pendant le rechargement
+      loaded: wpn.ammo > 0,                                 // roquette visible / grenade en main
+      flash: this.muzzleFlash > 0,
+      handColor: dark,
+    });
     ctx.globalAlpha = 1;
 
     // --- Bouclier : bulle bleue autour du personnage ---

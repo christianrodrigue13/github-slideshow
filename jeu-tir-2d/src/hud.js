@@ -7,6 +7,7 @@
 import { CONFIG } from './config.js';
 import { unit, font, bar, formatTime, roundedPath } from './ui.js';
 import { ranking, teamScores } from './match.js';
+import { drawWeaponIcon } from './weaponart.js';
 
 // ---------------------------------------------------------------------
 // Interface pendant la partie
@@ -53,6 +54,8 @@ export function drawHUD(ctx, game, view, pp) {
   ctx.font = font(13 * u);
   ctx.fillStyle = w.def.color;
   ctx.fillText(w.def.name, x, y);
+  // Dessin de l'arme en main, à droite des munitions
+  drawWeaponIcon(ctx, w.def.id, x + 118 * u, y + 17 * u, (w.def.id === 'grenade' ? 18 : 54) * u, w.def.color);
   // L'autre arme, en petit et grisée
   const other = p.weapons[1 - p.weaponIndex];
   const nameW = ctx.measureText(w.def.name).width;
