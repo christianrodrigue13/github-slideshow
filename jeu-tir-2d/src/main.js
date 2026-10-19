@@ -1,18 +1,16 @@
 // =====================================================================
-// main.js — Point d'entrée : canvas, boucle de jeu, caméra, règles de
-// la partie (éliminations, réapparition, chrono) et menus.
+// main.js — Point d'entrée : canvas, boucle de jeu, caméra, dessin,
+// enchaînement des écrans. Les règles de la partie sont dans match.js.
 // =====================================================================
 
 import { CONFIG } from './config.js';
 import { GameMap, MAPS } from './map.js';
-import { Fighter } from './player.js';
-import { BotBrain } from './bot.js';
 import { Input } from './input.js';
-import { Particle, Blast, smoke } from './bullet.js';
-import { Pickup } from './pickup.js';
-import { Sound, vibrate } from './audio.js';
-import { drawHUD, drawTouchControls, drawPauseButton, drawMenu,
-         menuButtons, hitMenu } from './hud.js';
+import { Sound } from './audio.js';
+import { load, save } from './save.js';
+import { game, startMatch, resetMatch, updateMatch, applyAimAssist } from './match.js';
+import { drawHUD, drawTouchControls, drawPauseButton } from './hud.js';
+import { drawMenu, menuButtons, hitMenu } from './menus.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -29,169 +27,20 @@ let state = 'menu';
 
 // Réglages choisis dans le menu (mémorisés d'une partie à l'autre)
 const DIFFS = Object.keys(CONFIG.difficulties);
-const settings = { map: 0, mode: 'ffa', difficulty: 'normal', bots: CONFIG.bots.count };
-try {
-  Object.assign(settings, JSON.parse(localStorage.getItem('jetarena-settings') || '{}'));
-} catch (_) { /* réglages par défaut */ }
+const settings = load('settings', { map: 0, mode: 'ffa', difficulty: 'normal', bots: CONFIG.bots.count });
 // (sécurité si les valeurs mémorisées ne sont plus valables)
 if (!MAPS[settings.map]) settings.map = 0;
 if (!DIFFS.includes(settings.difficulty)) settings.difficulty = 'normal';
 settings.bots = Math.max(3, Math.min(7, settings.bots | 0));
 
 function saveSettings() {
-  try { localStorage.setItem('jetarena-settings', JSON.stringify(settings)); } catch (_) { /* rien */ }
+  save('settings', settings);
 }
 
-// L'état partagé de la partie, transmis aux personnages et aux balles
-const game = {
-  map: new GameMap(MAPS[settings.map]),
-  settings,
-  teams: false,         // vrai en mode équipes
-  fighters: [],
-  bots: [],             // { fighter, brain }
-  player: null,
-  bullets: [],          // balles ET grenades
-  particles: [],
-  effects: [],          // ondes de choc des explosions
-  pickups: [],
-  shake: 0,             // intensité du tremblement d'écran
-  floaters: [],         // chiffres de dégâts qui flottent
-  hurtMarks: [],        // directions d'où viennent les tirs reçus par le joueur
-  banner: null,         // bandeau "Élimination !" { text, time }
-  feed: [],             // fil des éliminations
-  time: 0,
-  timeLeft: CONFIG.rules.matchDuration,
-  sound,
-
-  // Un tir de "tireur" peut-il toucher "cible" ? (jamais soi-même)
-  // (en équipes : jamais un coéquipier, les balles le traversent)
-  canHit(shooter, target) {
-    if (shooter === target) return false;
-    return !game.teams || shooter.team !== target.team;
-  },
-
-  // Une balle touche quelqu'un
-  onBulletHit(target, bullet) {
-    game.sparks(bullet.x, bullet.y, target.color, 6);
-    game.damage(target, bullet.damage, bullet.owner, bullet.vx * 0.02, 0);
-  },
-
-  // Inflige des dégâts (le bouclier encaisse en premier) + petite poussée
-  damage(target, amount, attacker, pushX, pushY) {
-    if (!target.alive || target.protectTimer > 0) return;  // invincible après réapparition
-    if (attacker && attacker.isBot) amount *= CONFIG.difficulties[settings.difficulty].damage;
-    const total = amount;
-    let absorbedTotal = 0;
-    if (target.shield > 0) {
-      const absorbed = Math.min(target.shield, amount);
-      target.shield -= absorbed;
-      amount -= absorbed;
-      absorbedTotal = absorbed;
-    }
-    target.health -= amount;
-    target.hitFlash = 0.12;
-    target.vx += pushX;
-    target.vy += pushY;
-    if (attacker && attacker !== target) {
-      target.lastAttacker = attacker;
-      target.lastAttackTime = game.time;
-    }
-    if (attacker === game.player && target !== game.player) addFloater(target, total, absorbedTotal);
-    if (target === game.player && attacker && attacker !== target) {
-      game.hurtMarks.push({ angle: Math.atan2(attacker.cy - target.cy, attacker.cx - target.cx),
-                            time: game.time });
-      if (game.hurtMarks.length > 6) game.hurtMarks.shift();
-    }
-    if (target === game.player) {
-      sound.play('hurt');
-      vibrate(CONFIG.feedback.vibrateOnHit);
-      game.addShake(3);
-    } else if (attacker === game.player) {
-      sound.play('hitmark');
-    }
-    if (target.health <= 0) killFighter(target, attacker);
-  },
-
-  // Explosion de grenade : dégâts qui diminuent avec la distance,
-  // bloqués par les murs, et souffle qui projette les personnages
-  explode(x, y, def, owner) {
-    const R = def.blastRadius;
-    for (const f of game.fighters) {
-      if (!f.alive) continue;
-      if (f !== owner && !game.canHit(owner, f)) continue;     // pas les coéquipiers
-      const dx = f.cx - x, dy = f.cy - y;
-      const d = Math.hypot(dx, dy);
-      if (d > R + f.w / 2) continue;
-      if (!game.map.lineOfSight(x, y - 4, f.cx, f.cy)) continue;
-      const k = Math.max(0.2, 1 - d / R);
-      const self = f === owner ? 0.5 : 1;       // on se blesse moins soi-même
-      const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : -1;
-      game.damage(f, def.damage * k * self, owner, nx * 650 * k, ny * 650 * k - 150 * k);
-    }
-    // Effets : onde de choc, flammes, éclats, fumée, tremblement d'écran
-    game.effects.push(new Blast(x, y, R));
-    game.sparks(x, y, '#ffd43b', 16, { speed: 420, size: 6 });
-    game.sparks(x, y, '#ff6b2b', 16, { speed: 320, size: 7 });
-    game.sparks(x, y, '#495057', 8, { speed: 500, size: 4 });
-    for (let i = 0; i < 8; i++) game.addParticle(smoke(x, y, 12));
-    const vol = hearingVolumeAt(x, y);
-    sound.play('explosion', vol);
-    game.addShake(14 * vol);
-  },
-
-  // Quelqu'un ramasse un objet
-  onPickup(f, pickup) {
-    if (f === game.player) sound.play('pickup');
-  },
-
-  // Petites étincelles (opts : voir Particle dans bullet.js)
-  sparks(x, y, color, n, opts) {
-    for (let i = 0; i < n; i++) game.addParticle(new Particle(x, y, color, opts));
-  },
-
-  // Ajoute une particule (au-delà de 500, on oublie les plus vieilles : fluidité)
-  addParticle(pa) {
-    game.particles.push(pa);
-    if (game.particles.length > 500) game.particles.shift();
-  },
-
-  addShake(amount) {
-    game.shake = Math.min(18, game.shake + amount);
-  },
-
-  // Événements des personnages → sons et vibrations
-  onFighterEvent(f, name) {
-    const vol = hearingVolume(f);
-    if (name === 'fire') {
-      const def = f.weapon.def;
-      sound.play(def.id, vol);                   // un son par arme
-      if (f === game.player) {
-        vibrate(CONFIG.feedback.vibrateOnShoot);
-        game.addShake(def.recoil / 50);          // les grosses armes secouent plus
-      }
-      // Douille éjectée (armes à balles)
-      if (def.kind === 'bullet' && vol > 0) {
-        const pa = new Particle(f.shoulderX, f.shoulderY, '#e0b44c',
-                                { speed: 120, size: 3, life: 0.5 });
-        pa.vx = -Math.cos(f.aimAngle) * 80 + (Math.random() - 0.5) * 40;
-        pa.vy = -160 - Math.random() * 60;
-        game.addParticle(pa);
-      }
-    } else if (f === game.player) {
-      sound.play(name);                            // 'reload', 'switch'
-    }
-  },
-};
-
-// Plus un personnage est loin du joueur, moins on l'entend
-function hearingVolume(f) {
-  return hearingVolumeAt(f.cx, f.cy);
-}
-function hearingVolumeAt(x, y) {
-  const p = game.player;
-  const d = Math.hypot(x - p.cx, y - p.cy);
-  return Math.max(0, 1 - d / 1100);
-}
+// L'état de la partie vit dans match.js ; on lui confie le son et les réglages
+game.sound = sound;
+game.settings = settings;
+game.map = new GameMap(MAPS[settings.map]);
 
 // Élément invisible dont le CSS donne la taille des encoches
 const safeProbe = document.createElement('div');
@@ -249,46 +98,9 @@ function worldToScreen(x, y) {
   return { x: (x - cam.x) * view.scale, y: (y - cam.y) * view.scale };
 }
 
-// ---------------------------------------------------------------------
-// Règles de la partie
-// ---------------------------------------------------------------------
-function startMatch() {
-  game.map = new GameMap(MAPS[settings.map]);
-  game.teams = settings.mode === 'teams';
-  game.player = new Fighter({ name: CONFIG.player.name, color: CONFIG.player.color, team: 0 });
-  game.fighters = [game.player];
-  game.bots = [];
-  const B = CONFIG.bots, T = CONFIG.teams;
-  const skill = CONFIG.difficulties[settings.difficulty];
-  // En équipes : l'équipe du joueur a la moitié (arrondie en dessous) des places
-  const total = settings.bots + 1;
-  const team0Size = Math.floor(total / 2);
-  for (let i = 0; i < settings.bots; i++) {
-    const team = game.teams && i + 1 >= team0Size ? 1 : 0;
-    const shades = T.shades[team];
-    const color = game.teams ? shades[i % shades.length] : B.colors[i % B.colors.length];
-    const f = new Fighter({ name: B.names[i % B.names.length], color, isBot: true, team });
-    if (game.teams) f.labelColor = T.colors[team];
-    game.fighters.push(f);
-    game.bots.push({ fighter: f, brain: new BotBrain(f, skill) });
-  }
-  // Chacun sur un point d'apparition différent
-  const spawns = [...game.map.spawns].sort(() => Math.random() - 0.5);
-  game.fighters.forEach((f, i) => {
-    f.respawn(spawns[i % spawns.length]);
-    f.protectTimer = 0;
-  });
-  game.bullets = [];
-  game.particles = [];
-  game.effects = [];
-  game.shake = 0;
-  game.floaters = [];
-  game.hurtMarks = [];
-  game.banner = null;
-  game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
-  game.feed = [];
-  game.time = 0;
-  game.timeLeft = CONFIG.rules.matchDuration;
+// Lance une partie avec les réglages du menu
+function beginMatch() {
+  startMatch(settings);
   updateCamera(0, true);
   setState('playing');
 }
@@ -301,70 +113,6 @@ function setState(s) {
     input.releaseAll();
     sound.setJet(0);
   }
-}
-
-// Point d'apparition le plus éloigné des adversaires vivants
-// (on tire au sort parmi les 3 meilleurs pour varier)
-function chooseSpawn(f) {
-  const others = game.fighters.filter((o) => o.alive && game.canHit(f, o));   // les adversaires
-  const scored = game.map.spawns.map((s) => {
-    let d = Infinity;
-    for (const o of others) d = Math.min(d, Math.hypot(o.cx - s.x, o.cy - s.y));
-    return { s, d };
-  }).sort((a, b) => b.d - a.d);
-  return scored[Math.floor(Math.random() * Math.min(3, scored.length))].s;
-}
-
-function killFighter(victim, killer) {
-  if (!victim.alive) return;
-  victim.alive = false;
-  victim.health = 0;
-  victim.deaths++;
-  victim.jetting = false;
-  victim.respawnTimer = CONFIG.rules.respawnDelay;
-  // Le personnage éclate en morceaux de sa couleur + un peu de fumée
-  game.sparks(victim.cx, victim.cy, victim.color, 22, { speed: 380, size: 7, life: 0.8 });
-  game.sparks(victim.cx, victim.cy, '#ffffff', 6, { speed: 250, size: 4 });
-  for (let i = 0; i < 3; i++) game.addParticle(smoke(victim.cx, victim.cy, 10));
-  if (victim === game.player) game.addShake(8);
-
-  if (killer && killer !== victim) {
-    killer.kills++;
-    if (killer === game.player) {
-      // Éliminations enchaînées en moins de 4 s → bandeau plus fort
-      killer.streak = game.time - (killer.lastKillTime ?? -99) < 4 ? (killer.streak || 1) + 1 : 1;
-      killer.lastKillTime = game.time;
-      const names = ['Élimination !', 'Double élimination !', 'Triple élimination !', 'Inarrêtable !'];
-      game.banner = { text: names[Math.min(killer.streak, 4) - 1], time: game.time };
-    }
-    addFeed(`${killer.name}  ✕  ${victim.name}`,
-            killer === game.player || victim === game.player);
-  } else if (killer === victim) {
-    addFeed(`${victim.name} s'est fait exploser`, victim === game.player);
-  } else {
-    addFeed(`${victim.name} est tombé dans le vide`, victim === game.player);
-  }
-  if (victim === game.player) sound.play('death');
-  else if (killer === game.player) sound.play('kill');
-  else sound.play('death', hearingVolume(victim) * 0.5);
-}
-
-// Chiffre de dégâts au-dessus de la cible (les coups rapprochés s'additionnent)
-function addFloater(target, amount, absorbed) {
-  const color = absorbed >= amount ? '#74c0fc' : '#ffe066';   // bleu = encaissé par le bouclier
-  const fl = game.floaters.find((x) => x.target === target && x.life > 0.55);
-  if (fl) {
-    fl.value += amount;
-    fl.life = 0.9;
-    fl.color = color;
-  } else {
-    game.floaters.push({ target, value: amount, x: target.cx, y: target.y - 22, life: 0.9, color });
-  }
-}
-
-function addFeed(text, mine) {
-  game.feed.unshift({ text, mine, time: game.time });
-  if (game.feed.length > 4) game.feed.pop();
 }
 
 // ---------------------------------------------------------------------
@@ -382,90 +130,18 @@ function update(dt) {
   }
   if (input.takePause()) { setState('paused'); return; }
 
-  game.time += dt;
-  game.timeLeft -= dt;
-  if (game.timeLeft <= 0) {
-    game.timeLeft = 0;
+  // Commande du joueur (+ aide à la visée quand on vise au doigt)
+  const p = game.player;
+  const ps = worldToScreen(p.shoulderX, p.shoulderY);
+  const playerCmd = input.getCommand(ps.x, ps.y);
+  if (p.alive && input.touchMode && input.rightStick) applyAimAssist(playerCmd, CONFIG.touch.aimAssist.strength);
+  if (updateMatch(dt, playerCmd)) {
     setState('over');
     return;
   }
 
-  // 1. Commandes : le joueur (entrées) et les bots (IA) produisent la même chose
-  const p = game.player;
-  const ps = worldToScreen(p.shoulderX, p.shoulderY);
-  const playerCmd = input.getCommand(ps.x, ps.y);
-  if (p.alive) applyAimAssist(playerCmd);
-  const cmds = new Map([[p, playerCmd]]);
-  for (const b of game.bots) cmds.set(b.fighter, b.brain.think(dt, game));
-
-  // 2. Les personnages appliquent leur commande
-  for (const f of game.fighters) {
-    if (f.alive) {
-      f.update(cmds.get(f), dt, game);
-      if (f.y > game.map.killY) {
-        // Tombé dans le vide : l'élimination revient au dernier tireur récent
-        const recent = game.time - f.lastAttackTime < CONFIG.rules.killCreditTime;
-        killFighter(f, recent ? f.lastAttacker : null);
-      }
-    } else {
-      f.respawnTimer -= dt;
-      if (f.respawnTimer <= 0) {
-        f.respawn(chooseSpawn(f));
-        const brain = game.bots.find((b) => b.fighter === f);
-        if (brain) brain.brain.reset();
-        if (f === p) sound.play('spawn');
-      }
-    }
-  }
-
-  // 3. Objets, balles, particules
-  for (const pk of game.pickups) pk.update(dt, game);
-  for (const b of game.bullets) b.update(dt, game);
-  game.bullets = game.bullets.filter((b) => !b.dead);
-  for (const pa of game.particles) pa.update(dt);
-  game.particles = game.particles.filter((pa) => pa.life > 0);
-  for (const e of game.effects) e.update(dt);
-  game.effects = game.effects.filter((e) => e.life > 0);
-
-  // Fumée qui s'échappe des jetpacks
-  for (const f of game.fighters) {
-    if (f.alive && f.jetting && Math.random() < 0.45) {
-      const nozzle = f.facing === 1 ? f.x - 2 : f.x + f.w + 2;
-      game.addParticle(smoke(nozzle, f.y + 36, 5));
-    }
-  }
-  game.shake *= Math.exp(-9 * dt);
-  for (const fl of game.floaters) { fl.life -= dt; fl.y -= 40 * dt; }
-  game.floaters = game.floaters.filter((fl) => fl.life > 0);
-
   sound.setJet(p.alive && p.jetting ? 1 : 0);
   updateCamera(dt);
-}
-
-// Aide à la visée (téléphone) : si un ennemi visible est presque dans
-// l'axe du viseur, la visée glisse un peu vers lui
-function applyAimAssist(cmd) {
-  if (!input.touchMode || !input.rightStick) return;
-  const A = CONFIG.touch.aimAssist;
-  const p = game.player;
-  const aim = Math.atan2(cmd.aimY, cmd.aimX);
-  let bestDiff = null;
-  for (const f of game.fighters) {
-    if (!f.alive || !game.canHit(p, f)) continue;
-    const dx = f.cx - p.shoulderX, dy = f.cy - p.shoulderY;
-    if (Math.hypot(dx, dy) > p.weapon.def.range) continue;
-    let diff = Math.atan2(dy, dx) - aim;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));      // ramène entre -π et π
-    if (Math.abs(diff) > A.angle) continue;
-    if (bestDiff !== null && Math.abs(diff) >= Math.abs(bestDiff)) continue;
-    if (!game.map.lineOfSight(p.shoulderX, p.shoulderY, f.cx, f.cy)) continue;
-    bestDiff = diff;
-  }
-  if (bestDiff !== null) {
-    const a = aim + bestDiff * A.strength;
-    cmd.aimX = Math.cos(a);
-    cmd.aimY = Math.sin(a);
-  }
 }
 
 // Clics / touchers sur les boutons des menus
@@ -475,9 +151,9 @@ function handleMenuTaps() {
     const id = hitMenu(menuButtons(state, view, game), tap);
     if (id === 'play') {
       wantFullscreen = true;       // fait au moment où le doigt se lève (voir plus bas)
-      startMatch();
+      beginMatch();
     } else if (id === 'replay' || id === 'restart') {
-      startMatch();
+      beginMatch();
     } else if (id === 'mainmenu') {
       goToMainMenu();
     } else if (id && id.includes(':')) {
@@ -508,13 +184,7 @@ function changeSetting(id) {
 }
 
 function goToMainMenu() {
-  game.player = null;
-  game.fighters = [];
-  game.bots = [];
-  game.bullets = [];
-  game.pickups = [];
-  game.particles = [];
-  game.effects = [];
+  resetMatch();
   view.zoom = 1;
   view.scale = view.baseScale;
   centerMenuCamera();
@@ -565,8 +235,7 @@ function render() {
     drawAimGuide();
     game.player.draw(ctx);                       // le joueur par-dessus
     for (const b of game.bullets) b.draw(ctx);
-    for (const pa of game.particles) pa.draw(ctx);
-    for (const e of game.effects) e.draw(ctx);
+    game.effects.draw(ctx);
     drawFloaters();
     ctx.restore();
 

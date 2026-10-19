@@ -216,10 +216,14 @@ export class GameMap {
   // Fond d'écran (ciel, étoiles, silhouettes) — en pixels écran
   drawBackground(ctx, cam, view) {
     const T = this.theme;
-    const g = ctx.createLinearGradient(0, 0, 0, view.h);
-    g.addColorStop(0, T.skyTop);
-    g.addColorStop(1, T.skyBottom);
-    ctx.fillStyle = g;
+    // (le dégradé n'est recalculé que si la hauteur de l'écran change)
+    if (!this.skyGradient || this.skyGradientH !== view.h) {
+      this.skyGradient = ctx.createLinearGradient(0, 0, 0, view.h);
+      this.skyGradient.addColorStop(0, T.skyTop);
+      this.skyGradient.addColorStop(1, T.skyBottom);
+      this.skyGradientH = view.h;
+    }
+    ctx.fillStyle = this.skyGradient;
     ctx.fillRect(0, 0, view.w, view.h);
 
     if (T.stars) {

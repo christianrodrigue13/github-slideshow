@@ -193,6 +193,11 @@ export const CONFIG = {
     volume: 0.5,             // volume général (0 à 1)
   },
 
+  // --- Effets visuels ---
+  effects: {
+    maxParticles: 350,       // réserve de particules réutilisées (moins = plus fluide)
+  },
+
   // Gravité appliquée aux grenades
   grenadeGravity: 1300,
 

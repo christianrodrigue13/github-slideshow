@@ -219,7 +219,6 @@ export class BotBrain {
     if (!visible && me.weapon.ammo < me.weapon.def.magazine * 0.4) cmd.reload = true;
 
     this.lastCmd = cmd;         // (gardée pour le débogage)
-    this.lastCmd = cmd;         // (gardée pour le débogage)
     return cmd;
   }
 
