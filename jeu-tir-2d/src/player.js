@@ -41,6 +41,7 @@ export class Fighter {
     this.jetting = false;        // en train de voler (pour l'affichage/son)
     this.aimAngle = 0;
     this.facing = 1;             // 1 = droite, -1 = gauche
+    this.walkPhase = 0;          // avancement de l'animation des jambes
 
     // Armes : [0] = principale, [1] = secondaire (remplaçable)
     this.weapons = [];
@@ -147,6 +148,7 @@ export class Fighter {
 
     // --- Mouvement + collisions ---
     this.moveAndCollide(dt, map);
+    if (this.grounded) this.walkPhase += this.vx * dt * 0.09;
 
     // --- Recharge du carburant au sol ---
     if (this.grounded) {
@@ -228,42 +230,79 @@ export class Fighter {
   }
 
   // ----------------------------- Dessin -----------------------------
-  draw(ctx) {
+  draw(ctx, showName = true) {
     if (!this.alive) return;
     const x = this.x, y = this.y, w = this.w, h = this.h;
+    const cx = this.cx;
+    const dark = shade(this.color, -0.35);
     // Invincible : le personnage clignote
     if (this.protectTimer > 0 && Math.floor(this.protectTimer * 10) % 2 === 0) {
       ctx.globalAlpha = 0.4;
     }
-    const back = this.facing === 1 ? x - 7 : x + w - 1;
+    const back = this.facing === 1 ? x - 6 : x + w - 2;
 
-    // Flamme du jetpack
-    if (this.jetting) {
-      const len = 14 + Math.random() * 12;
-      ctx.fillStyle = '#ffb347';
+    // --- Jambes : se balancent en courant, pendent en vol ---
+    const hipY = y + h - 14;
+    let a1, a2;
+    if (this.grounded) {
+      const speed = Math.min(1, Math.abs(this.vx) / CONFIG.fighter.runSpeed);
+      a1 = Math.sin(this.walkPhase) * 0.75 * speed;
+      a2 = -a1;
+    } else if (this.jetting) {
+      a1 = -0.12 * this.facing; a2 = 0.12 * this.facing;
+    } else {
+      a1 = -0.45 * this.facing; a2 = 0.25 * this.facing;   // jambes repliées en l'air
+    }
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    for (const [hx, a] of [[cx - 4, a1], [cx + 4, a2]]) {
       ctx.beginPath();
-      ctx.moveTo(back + 1, y + h * 0.65);
-      ctx.lineTo(back + 7, y + h * 0.65);
-      ctx.lineTo(back + 4, y + h * 0.65 + len);
+      ctx.moveTo(hx, hipY);
+      ctx.lineTo(hx + Math.sin(a) * 11, hipY + Math.cos(a) * 11);
+      ctx.stroke();
+    }
+
+    // --- Flamme du jetpack ---
+    if (this.jetting) {
+      const len = 14 + Math.random() * 14;
+      ctx.fillStyle = '#ff922b';
+      ctx.beginPath();
+      ctx.moveTo(back + 1, y + 32);
+      ctx.lineTo(back + 8, y + 32);
+      ctx.lineTo(back + 4.5, y + 32 + len);
+      ctx.fill();
+      ctx.fillStyle = '#ffe066';
+      ctx.beginPath();
+      ctx.moveTo(back + 3, y + 32);
+      ctx.lineTo(back + 6, y + 32);
+      ctx.lineTo(back + 4.5, y + 32 + len * 0.55);
       ctx.fill();
     }
 
-    // Jetpack (boîtier sur le dos)
-    ctx.fillStyle = '#7d8597';
-    ctx.fillRect(back, y + h * 0.25, 8, h * 0.42);
+    // --- Jetpack (boîtier sur le dos) ---
+    ctx.fillStyle = '#6c7489';
+    roundRect(ctx, back, y + 15, 9, 18, 3);
+    ctx.fillStyle = '#495063';
+    ctx.fillRect(back + 1, y + 30, 7, 3);           // tuyère
 
-    // Corps (blanc pendant un instant quand on est touché)
-    ctx.fillStyle = this.hitFlash > 0 ? '#ffffff' : this.color;
-    roundRect(ctx, x, y + 12, w, h - 12, 6);
-    // Tête
+    // --- Corps et tête (blancs un instant quand on est touché) ---
+    const body = this.hitFlash > 0 ? '#ffffff' : this.color;
+    ctx.fillStyle = body;
+    roundRect(ctx, x + 2, y + 15, w - 4, h - 27, 6);
     ctx.beginPath();
-    ctx.arc(x + w / 2, y + 9, 10, 0, Math.PI * 2);
+    ctx.arc(cx, y + 8, 9, 0, Math.PI * 2);
     ctx.fill();
+    // Ceinture
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + 2, hipY - 3, w - 4, 3);
     // Visière (regarde dans la direction de visée)
     ctx.fillStyle = '#1b2440';
-    ctx.fillRect(x + w / 2 + (this.facing === 1 ? 0 : -9), y + 5, 9, 6);
+    roundRect(ctx, cx + (this.facing === 1 ? 0 : -9), y + 4, 9, 6, 2);
+    ctx.fillStyle = 'rgba(160,220,255,0.6)';
+    ctx.fillRect(cx + (this.facing === 1 ? 5 : -7), y + 5, 2, 2);   // reflet
 
-    // Arme, orientée vers la visée
+    // --- Arme, orientée vers la visée, tenue par le bras ---
     const look = GUN_LOOK[this.weapon.def.id] || GUN_LOOK.rifle;
     const len = look.len;
     ctx.save();
@@ -277,29 +316,56 @@ export class Fighter {
       ctx.fillStyle = '#1b2440';
       ctx.fillRect(12, -7, 12, 4);
     }
+    // Bras
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-2, 1);
+    ctx.lineTo(12, 1);
+    ctx.stroke();
+    // Éclair au bout du canon (étoile à 4 branches)
     if (this.muzzleFlash > 0) {
       ctx.fillStyle = '#fff3b0';
       ctx.beginPath();
-      ctx.arc(len + 5, 0, 7, 0, Math.PI * 2);
+      ctx.moveTo(len, -6); ctx.lineTo(len + 6, -1); ctx.lineTo(len + 16, 0);
+      ctx.lineTo(len + 6, 1); ctx.lineTo(len, 6); ctx.lineTo(len + 3, 0);
+      ctx.closePath();
       ctx.fill();
     }
     ctx.restore();
     ctx.globalAlpha = 1;
 
-    // Nom et petite barre de vie au-dessus des bots
-    if (this.isBot) {
+    // --- Bouclier : bulle bleue autour du personnage ---
+    if (this.shield > 0) {
+      ctx.strokeStyle = `rgba(77,171,247,${0.25 + 0.5 * this.shield / CONFIG.pickups.shieldAmount})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(cx, this.cy, w * 0.95, h * 0.68, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // --- Nom et petite barre de vie au-dessus des bots ---
+    if (this.isBot && showName) {
       const ratio = this.health / CONFIG.fighter.maxHealth;
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(x - 7, y - 14, w + 14, 5);
       ctx.fillStyle = ratio > 0.35 ? '#69db7c' : '#ff6b6b';
       ctx.fillRect(x - 7, y - 14, (w + 14) * ratio, 5);
-      ctx.fillStyle = this.color;
+      ctx.fillStyle = this.labelColor || this.color;
       ctx.font = 'bold 12px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       ctx.fillText(this.name, x + w / 2, y - 17);
     }
   }
+}
+
+// Éclaircit (k > 0) ou assombrit (k < 0) une couleur "#rrggbb"
+export function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (c) => Math.round(k < 0 ? c * (1 + k) : c + (255 - c) * k);
+  const r = f(n >> 16), g = f((n >> 8) & 255), b = f(n & 255);
+  return `rgb(${r},${g},${b})`;
 }
 
 // Rapproche une valeur d'une cible sans la dépasser

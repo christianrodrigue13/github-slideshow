@@ -4,11 +4,11 @@
 // =====================================================================
 
 import { CONFIG } from './config.js';
-import { GameMap } from './map.js';
+import { GameMap, MAPS } from './map.js';
 import { Fighter } from './player.js';
 import { BotBrain } from './bot.js';
 import { Input } from './input.js';
-import { Particle } from './bullet.js';
+import { Particle, Blast, smoke } from './bullet.js';
 import { Pickup } from './pickup.js';
 import { Sound, vibrate } from './audio.js';
 import { drawHUD, drawTouchControls, drawPauseButton, drawMenu,
@@ -28,13 +28,15 @@ let state = 'menu';
 
 // L'état partagé de la partie, transmis aux personnages et aux balles
 const game = {
-  map: new GameMap(),
+  map: new GameMap(MAPS[0]),
   fighters: [],
   bots: [],             // { fighter, brain }
   player: null,
   bullets: [],          // balles ET grenades
   particles: [],
+  effects: [],          // ondes de choc des explosions
   pickups: [],
+  shake: 0,             // intensité du tremblement d'écran
   feed: [],             // fil des éliminations
   time: 0,
   timeLeft: CONFIG.rules.matchDuration,
@@ -70,6 +72,7 @@ const game = {
     if (target === game.player) {
       sound.play('hurt');
       vibrate(CONFIG.feedback.vibrateOnHit);
+      game.addShake(3);
     } else if (attacker === game.player) {
       sound.play('hitmark');
     }
@@ -92,10 +95,15 @@ const game = {
       const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : -1;
       game.damage(f, def.damage * k * self, owner, nx * 650 * k, ny * 650 * k - 150 * k);
     }
-    game.sparks(x, y, '#ffd43b', 18);
-    game.sparks(x, y, '#ff6b2b', 18);
-    game.sparks(x, y, '#868e96', 10);
-    sound.play('explosion', hearingVolumeAt(x, y));
+    // Effets : onde de choc, flammes, éclats, fumée, tremblement d'écran
+    game.effects.push(new Blast(x, y, R));
+    game.sparks(x, y, '#ffd43b', 16, { speed: 420, size: 6 });
+    game.sparks(x, y, '#ff6b2b', 16, { speed: 320, size: 7 });
+    game.sparks(x, y, '#495057', 8, { speed: 500, size: 4 });
+    for (let i = 0; i < 8; i++) game.addParticle(smoke(x, y, 12));
+    const vol = hearingVolumeAt(x, y);
+    sound.play('explosion', vol);
+    game.addShake(14 * vol);
   },
 
   // Quelqu'un ramasse un objet
@@ -103,17 +111,39 @@ const game = {
     if (f === game.player) sound.play('pickup');
   },
 
-  // Petites étincelles
-  sparks(x, y, color, n) {
-    for (let i = 0; i < n; i++) game.particles.push(new Particle(x, y, color));
+  // Petites étincelles (opts : voir Particle dans bullet.js)
+  sparks(x, y, color, n, opts) {
+    for (let i = 0; i < n; i++) game.addParticle(new Particle(x, y, color, opts));
+  },
+
+  // Ajoute une particule (au-delà de 500, on oublie les plus vieilles : fluidité)
+  addParticle(pa) {
+    game.particles.push(pa);
+    if (game.particles.length > 500) game.particles.shift();
+  },
+
+  addShake(amount) {
+    game.shake = Math.min(18, game.shake + amount);
   },
 
   // Événements des personnages → sons et vibrations
   onFighterEvent(f, name) {
     const vol = hearingVolume(f);
     if (name === 'fire') {
-      sound.play(f.weapon.def.id, vol);          // un son par arme
-      if (f === game.player) vibrate(CONFIG.feedback.vibrateOnShoot);
+      const def = f.weapon.def;
+      sound.play(def.id, vol);                   // un son par arme
+      if (f === game.player) {
+        vibrate(CONFIG.feedback.vibrateOnShoot);
+        game.addShake(def.recoil / 50);          // les grosses armes secouent plus
+      }
+      // Douille éjectée (armes à balles)
+      if (def.kind === 'bullet' && vol > 0) {
+        const pa = new Particle(f.shoulderX, f.shoulderY, '#e0b44c',
+                                { speed: 120, size: 3, life: 0.5 });
+        pa.vx = -Math.cos(f.aimAngle) * 80 + (Math.random() - 0.5) * 40;
+        pa.vy = -160 - Math.random() * 60;
+        game.addParticle(pa);
+      }
     } else if (f === game.player) {
       sound.play(name);                            // 'reload', 'switch'
     }
@@ -201,6 +231,8 @@ function startMatch() {
   });
   game.bullets = [];
   game.particles = [];
+  game.effects = [];
+  game.shake = 0;
   game.pickups = game.map.pickupSpots.map((spot) => new Pickup(spot));
   game.feed = [];
   game.time = 0;
@@ -238,7 +270,11 @@ function killFighter(victim, killer) {
   victim.deaths++;
   victim.jetting = false;
   victim.respawnTimer = CONFIG.rules.respawnDelay;
-  game.sparks(victim.cx, victim.cy, victim.color, 26);
+  // Le personnage éclate en morceaux de sa couleur + un peu de fumée
+  game.sparks(victim.cx, victim.cy, victim.color, 22, { speed: 380, size: 7, life: 0.8 });
+  game.sparks(victim.cx, victim.cy, '#ffffff', 6, { speed: 250, size: 4 });
+  for (let i = 0; i < 3; i++) game.addParticle(smoke(victim.cx, victim.cy, 10));
+  if (victim === game.player) game.addShake(8);
 
   if (killer && killer !== victim) {
     killer.kills++;
@@ -315,6 +351,17 @@ function update(dt) {
   game.bullets = game.bullets.filter((b) => !b.dead);
   for (const pa of game.particles) pa.update(dt);
   game.particles = game.particles.filter((pa) => pa.life > 0);
+  for (const e of game.effects) e.update(dt);
+  game.effects = game.effects.filter((e) => e.life > 0);
+
+  // Fumée qui s'échappe des jetpacks
+  for (const f of game.fighters) {
+    if (f.alive && f.jetting && Math.random() < 0.45) {
+      const nozzle = f.facing === 1 ? f.x - 2 : f.x + f.w + 2;
+      game.addParticle(smoke(nozzle, f.y + 36, 5));
+    }
+  }
+  game.shake *= Math.exp(-9 * dt);
 
   sound.setJet(p.alive && p.jetting ? 1 : 0);
   updateCamera(dt);
@@ -361,20 +408,21 @@ function goFullscreen() {
 function render() {
   // Repère écran (pixels CSS) avec prise en compte de la densité
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  ctx.fillStyle = '#151b2e';
-  ctx.fillRect(0, 0, view.w, view.h);
+  game.map.drawBackground(ctx, cam, view);
 
   if (game.player) {
-    // Repère monde : zoom + décalage caméra
+    // Repère monde : zoom + décalage caméra (+ tremblement)
+    const sh = state === 'playing' ? game.shake : 0;
     ctx.save();
     ctx.scale(view.scale, view.scale);
-    ctx.translate(-cam.x, -cam.y);
+    ctx.translate(-cam.x + (Math.random() - 0.5) * 2 * sh, -cam.y + (Math.random() - 0.5) * 2 * sh);
     game.map.draw(ctx, cam);
     for (const pk of game.pickups) pk.draw(ctx);
     for (const f of game.fighters) if (f !== game.player) f.draw(ctx);
     game.player.draw(ctx);                       // le joueur par-dessus
     for (const b of game.bullets) b.draw(ctx);
     for (const pa of game.particles) pa.draw(ctx);
+    for (const e of game.effects) e.draw(ctx);
     ctx.restore();
 
     if (state !== 'over') drawHUD(ctx, game, view);

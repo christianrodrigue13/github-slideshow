@@ -18,8 +18,11 @@ export class Bullet {
     this.owner = owner;                          // qui a tiré
     this.life = def.range / def.bulletSpeed;     // durée de vie (portée)
     this.dead = false;
-    // Ancienne position (pour dessiner une traînée)
+    this.trail = def.id === 'sniper' ? 0.035 : 0.014;  // longueur de la traînée
+    this.width = def.id === 'sniper' ? 2.5 : 3;
+    // Ancienne position et point de départ (pour dessiner une traînée)
     this.px = x; this.py = y;
+    this.ox = x; this.oy = y;
   }
 
   // game doit fournir : map, fighters, canHit(tireur, cible),
@@ -61,10 +64,14 @@ export class Bullet {
 
   draw(ctx) {
     ctx.strokeStyle = this.color;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = this.width;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     // Petite traînée derrière la balle
-    ctx.moveTo(this.x - this.vx * 0.012, this.y - this.vy * 0.012);
+    // (la traînée ne remonte jamais plus loin que le canon)
+    const k = Math.min(this.trail, Math.hypot(this.x - this.ox, this.y - this.oy) /
+                                   Math.hypot(this.vx, this.vy));
+    ctx.moveTo(this.x - this.vx * k, this.y - this.vy * k);
     ctx.lineTo(this.x, this.y);
     ctx.stroke();
   }
@@ -137,30 +144,78 @@ export class Grenade {
   }
 }
 
-// --- Particules : petits carrés qui volent et disparaissent ---
+// --- Particules : petits morceaux qui volent et disparaissent ---
+// opts (facultatif) : speed, size, life, gravity, drag, grow, up
 export class Particle {
-  constructor(x, y, color) {
+  constructor(x, y, color, opts = {}) {
     const a = Math.random() * Math.PI * 2;
-    const s = 60 + Math.random() * 260;
+    const sp = (opts.speed ?? 260) * (0.25 + Math.random() * 0.75);
     this.x = x; this.y = y;
-    this.vx = Math.cos(a) * s;
-    this.vy = Math.sin(a) * s - 80;
-    this.life = this.maxLife = 0.25 + Math.random() * 0.35;
+    this.vx = Math.cos(a) * sp;
+    this.vy = Math.sin(a) * sp - (opts.up ?? 80);
+    this.life = this.maxLife = (opts.life ?? 0.45) * (0.6 + Math.random() * 0.8);
     this.color = color;
-    this.size = 2 + Math.random() * 3;
+    this.size = (opts.size ?? 4) * (0.5 + Math.random() * 0.8);
+    this.gravity = opts.gravity ?? 900;
+    this.drag = opts.drag ?? 0;          // freinage dans l'air (fumée)
+    this.grow = opts.grow ?? 0;          // la fumée grossit en vieillissant
+    this.round = !!opts.round;
   }
 
   update(dt) {
     this.life -= dt;
-    this.vy += 900 * dt;
+    this.vy += this.gravity * dt;
+    if (this.drag) {
+      const k = Math.max(0, 1 - this.drag * dt);
+      this.vx *= k; this.vy *= k;
+    }
+    this.size += this.grow * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
   }
 
   draw(ctx) {
-    ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+    ctx.globalAlpha = Math.max(0, this.life / this.maxLife) * (this.round ? 0.5 : 1);
     ctx.fillStyle = this.color;
-    ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+    if (this.round) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Fumée : grosse particule ronde, grise, qui monte doucement et grossit
+export function smoke(x, y, size = 8) {
+  return new Particle(x, y, '#9aa3b5', { speed: 50, size, life: 0.9, gravity: -60,
+                                         drag: 2, grow: 14, up: 20, round: true });
+}
+
+// Onde de choc d'une explosion : un cercle lumineux qui grandit et s'efface
+export class Blast {
+  constructor(x, y, radius) {
+    this.x = x; this.y = y;
+    this.radius = radius;
+    this.life = this.maxLife = 0.35;
+  }
+
+  update(dt) { this.life -= dt; }
+
+  draw(ctx) {
+    const t = 1 - this.life / this.maxLife;         // 0 → 1
+    ctx.globalAlpha = Math.max(0, 1 - t);
+    ctx.fillStyle = '#fff3bf';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * (0.3 + 0.4 * t) * (1 - t), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffd43b';
+    ctx.lineWidth = 6 * (1 - t) + 1;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * (0.3 + 0.8 * t), 0, Math.PI * 2);
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 }
