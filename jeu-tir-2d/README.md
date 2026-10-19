@@ -4,7 +4,7 @@
 
 Un prototype jouable **dans le navigateur du téléphone** : un personnage avec
 jetpack, du tir dans toutes les directions, des parties de 3 minutes contre
-4 bots. Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
+des bots, sur 3 cartes, en chacun pour soi ou en équipes. Pas de multijoueur pour l'instant : le but est de savoir si le jeu est
 amusant avant d'investir dans des serveurs ou l'App Store.
 
 Les graphismes et les sons sont **provisoires** : des formes colorées et des
@@ -151,16 +151,52 @@ Les joysticks apparaissent là où tu poses le doigt.
 
 ---
 
-## 4. Les règles
+## 4. Le menu et les règles
 
-- Chacun pour soi : toi contre 4 bots, et les bots se tirent aussi dessus.
+### Le menu d'accueil
+Touche **◀ / ▶** (ou la valeur elle-même) pour changer chaque réglage, puis **JOUER**.
+Tes choix sont mémorisés pour la prochaine fois.
+
+| Réglage | Choix |
+|---|---|
+| **Carte** | Entrepôt (nuit), Canyon (coucher de soleil, grands gouffres), Tours (verticale, beaucoup de vol) |
+| **Mode** | Chacun pour soi, ou Équipes (Bleus contre Rouges, toi chez les Bleus) |
+| **Difficulté** | Facile, Normal, Difficile (précision et réflexes des bots, dégâts qu'ils font) |
+| **Bots** | de 3 à 7 |
+
+### Les règles
+- **Chacun pour soi** : tout le monde se tire dessus. **Équipes** : les balles
+  traversent tes coéquipiers (pas de tir ami), on gagne au total d'éliminations de l'équipe.
 - 100 points de vie. Le jetpack consomme du carburant, qui se recharge **au sol**.
 - Tomber dans un trou = mort. Si quelqu'un t'a touché juste avant, c'est lui
-  qui marque le point.
+  qui marque le point. Ta propre grenade peut te blesser (à moitié).
 - Après une mort, on réapparaît au bout de **3 secondes**, avec un court moment
   d'invincibilité (le personnage clignote ; tirer l'annule).
-- Une partie dure **3 minutes**. Le classement final se fait au nombre
-  d'éliminations (puis au plus petit nombre de morts).
+- Une partie dure **3 minutes**.
+
+### Armes et objets
+Tu portes **2 armes** : le **fusil auto** (toujours) et une **arme secondaire**
+(au départ le fusil à pompe). Le bouton **⇄** passe de l'une à l'autre.
+
+| Arme | En bref |
+|---|---|
+| Fusil auto | rafales rapides, bonne portée |
+| Fusil à pompe | 7 plombs, dévastateur de près |
+| Sniper | 70 dégâts par tir, très longue portée, laser de visée, la caméra dézoome |
+| Lance-grenades | grenades qui rebondissent et explosent (dégâts de zone + souffle), trajectoire affichée |
+
+À ramasser en passant dessus (ils réapparaissent après quelques secondes) :
+- **Caisse en bois** (lettre = l'arme dedans) : remplace ton arme secondaire.
+- **Trousse blanche à croix rouge** : +50 PV.
+- **Écusson bleu** : bouclier de 50 points qui encaisse les dégâts avant ta vie
+  (bulle bleue autour du personnage).
+
+### Ce qui aide à jouer
+- **Aide à la visée** (téléphone) : si un ennemi est presque dans ton viseur, la visée glisse un peu vers lui.
+- **Pointillés de visée** quand ton pouce droit vise.
+- **Chiffres jaunes** au-dessus des ennemis touchés (bleus si leur bouclier a encaissé).
+- **Flèches rouges** autour de toi : d'où viennent les tirs que tu reçois.
+- **Minicarte** en haut à droite : les ennemis n'y apparaissent (en rouge) que s'ils viennent de tirer.
 
 ---
 
@@ -174,16 +210,22 @@ Exemples :
 
 | Je veux… | Je modifie dans `config.js` |
 |---|---|
-| des bots moins précis | `bots.aimError` : plus grand = plus maladroits (ex. `0.3`) |
-| des bots plus lents à réagir | `bots.reactionTime` (ex. `0.8`) |
-| plus ou moins de bots | `bots.count` (3 à 5 conseillé) |
+| des bots plus ou moins forts | `difficulties` : `aimError` (plus grand = plus maladroits), `reactionTime`, `damage` |
+| changer le nombre de bots par défaut | `bots.count` (et dans le menu) |
 | voler plus longtemps | `jetpack.maxFuel` ou `jetpack.burnPerSecond` |
 | un perso plus rapide | `fighter.runSpeed` |
 | sauter plus haut | `fighter.jumpSpeed` |
-| plus de dégâts au fusil auto | `weapons[0].damage` (le 1er bloc de la liste `weapons`) |
+| modifier une arme | son bloc dans `weapons` (`damage`, `fireRate`, `magazine`, `range`…) |
+| une explosion plus grosse | `weapons` → `launcher` → `blastRadius` |
+| plus de soin / de bouclier | `pickups.healthAmount`, `pickups.shieldAmount` |
+| des objets qui reviennent plus vite | `pickups.healthRespawn`, `shieldRespawn`, `weaponRespawn` |
+| plus ou moins d'aide à la visée | `touch.aimAssist.strength` (0 = aucune) |
 | des parties plus courtes | `rules.matchDuration` (en secondes) |
 | des joysticks plus grands | `touch.stickRadius` |
 | plus / moins de vibrations | `feedback.vibrateOnShoot`, `feedback.vibrateOnHit` (0 = coupé) |
+
+Les **cartes** sont dans `src/map.js` (liste `MAPS`) : chaque carte est une
+liste de rectangles, de points d'apparition et d'emplacements d'objets.
 
 ---
 
@@ -202,8 +244,9 @@ jeu-tir-2d/
     ├── player.js   le personnage (physique, jetpack, armes) — joueur ET bots
     ├── bot.js      IA : fabrique la même commande qu'un joueur
     ├── weapon.js   chargeur, cadence, rechargement
-    ├── bullet.js   balles (sans traversée des murs) et particules
-    ├── map.js      carte, collisions, lancer de rayon
+    ├── bullet.js   balles (sans traversée des murs), grenades, particules, explosions
+    ├── pickup.js   objets à ramasser (soin, bouclier, caisses d'armes)
+    ├── map.js      les 3 cartes, leurs ambiances, collisions, lancer de rayon
     ├── hud.js      interface, joysticks, menus
     └── audio.js    sons Web Audio générés + vibrations
 ```
@@ -227,4 +270,6 @@ de charger les modules JavaScript depuis un fichier ouvert en double-cliquant
   la barre d'adresse.
 - Le son ne démarre qu'après le premier toucher (règle des navigateurs).
 - Munitions de réserve illimitées : seul le chargeur compte.
-- Une seule carte.
+- Pas d'arme au corps à corps.
+- L'IA des bots est simple : sur des cartes nouvelles, ils peuvent parfois
+  hésiter devant un obstacle compliqué.
